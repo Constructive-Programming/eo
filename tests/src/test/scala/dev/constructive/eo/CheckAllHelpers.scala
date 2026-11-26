@@ -1,12 +1,8 @@
 package dev.constructive.eo
 
 import cats.{Applicative, Functor, Monoid}
-import dev.constructive.eo.accessor.*
-import dev.constructive.eo.forgetful.*
-import org.scalacheck.{Arbitrary, Cogen}
 import org.specs2.mutable.SpecificationLike
 import org.specs2.specification.core.Fragment
-import org.typelevel.discipline.specs2.mutable.Discipline
 
 import data.{MultiFocus, PSVec}
 import laws.{FoldLaws, MultiFocusLaws, TraversalLaws}
@@ -29,7 +25,6 @@ import laws.eo.discipline.{
 }
 import laws.typeclass.{ForgetfulFunctorLaws, ForgetfulTraverseLaws}
 import laws.typeclass.discipline.{ForgetfulFunctorTests, ForgetfulTraverseTests}
-import optics.Optic
 import optics.Optic.*
 
 /** Path B helpers — collapse the highly repetitive `checkAll(...)` patterns in `OpticsLawsSpec` and

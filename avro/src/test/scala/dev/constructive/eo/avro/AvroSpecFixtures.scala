@@ -1,16 +1,7 @@
-package dev.constructive.eo.avro
+package dev.constructive.eo
+package avro
 
-import cats.data.Chain
-import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
-import java.io.ByteArrayOutputStream
-import org.apache.avro.Schema
-import org.apache.avro.generic.{
-  GenericData,
-  GenericDatumWriter,
-  GenericRecord,
-  GenericRecordBuilder
-}
-import org.apache.avro.io.EncoderFactory
+import org.apache.avro.generic.GenericRecordBuilder
 
 /** Shared ADT fixtures + kindlings-derived codecs for the avro-test specs.
   *
@@ -22,6 +13,14 @@ import org.apache.avro.io.EncoderFactory
   * [[AvroCodec.derived]] and exposes one combined typeclass to the prism layer.
   */
 object AvroSpecFixtures:
+
+  // ---- NamedTuple foci ------------------------------------------------
+
+  /** The `.fields(...)` foci the specs share. They need no codec givens: kindlings derives the
+    * NamedTuple codec at the `.fields` call site.
+    */
+  type NameAge = NamedTuple.NamedTuple[("name", "age"), (String, Int)]
+  type NamePrice = NamedTuple.NamedTuple[("name", "price"), (String, Double)]
 
   // ---- ADTs ----------------------------------------------------------
 
@@ -303,12 +302,7 @@ object AvroSpecFixtures:
     * bare `long` / union-branch record rather than a top-level record.
     */
   def toBinaryValue(value: Any, schema: Schema): Array[Byte] =
-    val out = new ByteArrayOutputStream()
-    val encoder = EncoderFactory.get().binaryEncoder(out, null)
-    val writer = new GenericDatumWriter[Any](schema)
-    writer.write(value, encoder)
-    encoder.flush()
-    out.toByteArray
+    AvroBinaryCursor.writeDatum(value, schema)
 
   /** Decode a single VALUE from Avro binary under `schema` — inverse of [[toBinaryValue]]. */
   def fromBinaryValue(bytes: Array[Byte], schema: Schema): Any =
@@ -356,12 +350,7 @@ object AvroSpecFixtures:
     * parse-helper round-trip tests.
     */
   def toBinary(record: GenericRecord, schema: Schema): Array[Byte] =
-    val out = new ByteArrayOutputStream()
-    val encoder = EncoderFactory.get().binaryEncoder(out, null)
-    val writer = new GenericDatumWriter[GenericRecord](schema)
-    writer.write(record, encoder)
-    encoder.flush()
-    out.toByteArray
+    AvroBinaryCursor.writeDatum(record, schema)
 
   /** Build a record by name + value pairs against the supplied schema, useful when the spec wants a
     * "broken" record for failure-path tests.

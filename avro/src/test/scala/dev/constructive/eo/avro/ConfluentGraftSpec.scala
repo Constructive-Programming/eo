@@ -1,9 +1,7 @@
-package dev.constructive.eo.avro
+package dev.constructive.eo
+package avro
 
-import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
 import java.util.concurrent.atomic.AtomicInteger
-import org.apache.avro.Schema
-import org.specs2.mutable.Specification
 
 /** Produce-side graft fixtures (top-level so kindlings' `new T(...)` derivation isn't tripped by a
   * missing outer accessor):

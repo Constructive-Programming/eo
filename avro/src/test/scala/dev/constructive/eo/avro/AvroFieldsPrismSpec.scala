@@ -1,16 +1,5 @@
-package dev.constructive.eo.avro
-
-import scala.language.implicitConversions
-
-import cats.data.Ior
-import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
-import java.util.ArrayList
-import org.apache.avro.Schema
-import org.apache.avro.generic.{GenericData, GenericRecord, IndexedRecord}
-import org.scalacheck.Prop.forAll
-import org.scalacheck.{Arbitrary, Gen}
-import org.specs2.ScalaCheck
-import org.specs2.mutable.Specification
+package dev.constructive.eo
+package avro
 
 /** Behaviour spec for the multi-field NamedTuple Prism ([[AvroPrism]] with a Fields focus) on the
   * Avro carrier.
@@ -26,8 +15,6 @@ import org.specs2.mutable.Specification
 class AvroFieldsPrismSpec extends Specification with ScalaCheck:
 
   import AvroSpecFixtures.*
-  import AvroFieldsPrismSpec.*
-  import AvroFieldsPrismSpec.given
 
   private given Arbitrary[Person] = Arbitrary(
     for
@@ -46,7 +33,6 @@ class AvroFieldsPrismSpec extends Specification with ScalaCheck:
   //   get(valid record) decodes to a NameAge whose name/age match the Person,
   //   place-then-getOption round-trips the focus,
   //   two-step modify on disjoint fields == single .fields modify (composability bonus)
-  // CPD-OFF — pre-existing mirror of AvroPrismLawsSpec / JsonFieldsPrismLawsSpec; touched by *Unsafe removal (#101).
   "AvroFieldsPrism default-Ior surface forAll: modify-id / modify / get / round-trip / compose" >> forAll {
     (p: Person, suffix: String, newName: String, newAge: Int) =>
       val record = personRecord(p)
@@ -129,7 +115,7 @@ class AvroFieldsPrismSpec extends Specification with ScalaCheck:
   //   .fields expansion in one file" for a macro hoisting bug ("reference to
   //   decode_String$macro$N outside the scope where it was defined"). That was a misreading —
   //   the number and shape of expansions per file is irrelevant. The real discriminator was
-  //   given availability: this file declares `AvroCodec[NameAge]` (see the companion), so the
+  //   given availability: this file brings `AvroCodec[NameAge]` into scope (`AvroSpecFixtures.given`), so the
   //   Person shape resolved, and any OTHER shape fell through to kindlings' auto-derivation,
   //   which could not construct the macro's `*:`-spelled NamedTuple. Fixed at the source in
   //   `MacroSelectors.tupleTypeOf`; `NamedTupleSpellingSpec` carries two differently-shaped
@@ -175,7 +161,6 @@ class AvroFieldsPrismSpec extends Specification with ScalaCheck:
       case other          =>
         org.specs2.execute.Failure(s"expected Ior.Right, got $other"): org.specs2.execute.Result
   }
-  // CPD-ON
 
   // ---- Helpers -----------------------------------------------------
 
@@ -201,22 +186,5 @@ class AvroFieldsPrismSpec extends Specification with ScalaCheck:
   private def recordsEqual(a: IndexedRecord, b: IndexedRecord): Boolean =
     a.getSchema == b.getSchema &&
       GenericData.get().compare(a, b, a.getSchema) == 0
-
-end AvroFieldsPrismSpec
-
-object AvroFieldsPrismSpec:
-
-  /** The NamedTuple type the macro synthesises for `Person.fields(_.name, _.age)`. Declared at the
-    * spec object level so the spec body can ascribe values to it without re-typing the NamedTuple
-    * shape.
-    */
-  type NameAge = NamedTuple.NamedTuple[("name", "age"), (String, Int)]
-
-  // Kindlings-derived AvroCodec for the synthesised NamedTuple. The macro summons this at the
-  // call site of `.fields(_.name, _.age)`; without the explicit derivation here it wouldn't be
-  // resolvable from inside this spec.
-  given AvroEncoder[NameAge] = AvroEncoder.derived
-  given AvroDecoder[NameAge] = AvroDecoder.derived
-  given AvroSchemaFor[NameAge] = AvroSchemaFor.derived
 
 end AvroFieldsPrismSpec

@@ -388,8 +388,8 @@ private[avro] object AvroWalk:
               case other             => Left(s"step $i: expected an array/map but found $other")
     loop(0, root)
 
-  // CPD-OFF — `resolveFieldName` and `fieldNameAt` take the same resolver inputs (and the same
-  // probe) so the path-shaped and record-shaped entry points cannot drift.
+  // `resolveFieldName` and `fieldNameAt` take the same resolver inputs (and the same probe) so the
+  // path-shaped and record-shaped entry points cannot drift.
   /** The schema field name for the case-class field `scalaName` — declaration index `declIdx` among
     * the case fields `caseNames` — inside the record reached by [[schemaAt]]`(root, parentPath)`.
     * See [[fieldNameAt]] for the resolution rule.
@@ -529,8 +529,6 @@ private[avro] object AvroWalk:
           + ". `.fieldNamed` takes the SCHEMA field name; for the case-class field name use"
           + " .field(_.x)."
       )
-
-  // CPD-ON
 
   /** ALL-OR-NOTHING nominal resolution: the schema-field position for the case field at `declIdx`,
     * or `-1` to abstain and let position decide.

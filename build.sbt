@@ -84,6 +84,7 @@ ThisBuild / githubWorkflowBuildPreamble ++= Seq(
   WorkflowStep.Sbt(
     List(
       "benchmarks/scalafmtCheck",
+      "benchKit/scalafmtCheck",
       "demoUplcJvm/scalafmtCheckAll",
       "demoUplcJvmValidators/scalafmtCheckAll",
       "demoUplcJvmBench/scalafmtCheckAll",
@@ -100,6 +101,7 @@ ThisBuild / githubWorkflowBuildPreamble ++= Seq(
   ),
   WorkflowStep.Sbt(
     List(
+      "benchKit/scalafixAll --check",
       "demoUplcJvm/scalafixAll --check",
       "demoUplcJvmValidators/scalafixAll --check",
       "demoUplcJvmBench/scalafixAll --check",
@@ -750,6 +752,8 @@ lazy val root = tlCrossRootProject
       core,
       laws,
       tests,
+      sampleKit,
+      specKit,
       generics,
       circeIntegration,
       avroIntegration,
@@ -796,15 +800,47 @@ lazy val laws = eoCross(
     libraryDependencies += scalacheck.value,
   )
 
+// Shared sample ADTs (`Expr`, `Bin`) for the specs, benchmarks and docs, so none of them keeps its
+// own copy. Unpublished.
+lazy val sampleKit = eoCrossBase(
+  crossProject(JVMPlatform, JSPlatform, NativePlatform)
+    .crossType(CrossType.Pure)
+    .in(file("sample-kit"))
+    .dependsOn(core)
+)
+  .settings(
+    name := "eo-sample-kit",
+    publish / skip := true,
+    mimaPreviousArtifacts := Set.empty,
+  )
+
+// The specs2 / ScalaCheck / discipline names every module's specs share (`SpecPrelude`), so no
+// module's prelude repeats them. JVM + Scala.js only, like specs2. Unpublished.
+lazy val specKit = crossProject(JVMPlatform, JSPlatform)
+  .crossType(CrossType.Pure)
+  .in(file("spec-kit"))
+  .settings(commonSettings *)
+  .settings(
+    name := "eo-spec-kit",
+    publish / skip := true,
+    mimaPreviousArtifacts := Set.empty,
+    libraryDependencies += discipline.value,
+    libraryDependencies += scalacheck.value,
+  )
+
 lazy val tests = eoCrossBase(
   crossProject(JVMPlatform, JSPlatform, NativePlatform)
     .crossType(CrossType.Pure)
     .in(file("tests"))
-    .dependsOn(core, laws, generics % Test)
+    .dependsOn(core, laws, generics % Test, sampleKit % Test)
+    .jvmConfigure(_.dependsOn(specKit.jvm % Test))
+    .jsConfigure(_.dependsOn(specKit.js % Test))
 )
   .settings(
     name := "eo-tests",
     publish / skip := true,
+    // The specs lean on implicit conversions; one flag instead of a language import per file.
+    Test / scalacOptions += "-language:implicitConversions",
     // Never published, so there is no 1.0.0 artifact for MiMa to compare against.
     mimaPreviousArtifacts := Set.empty,
     // cats' own Traverse laws for the hand-written `Traverse[PSVec]` (PSVecTraverseLawsSpec).
@@ -931,11 +967,15 @@ lazy val avroIntegration: Project = project
     // directly. circe-core alone (below) still serves the AvroJson walk/prism surface.
     circeIntegration.jvm % Optional,
     laws.jvm % Test,
+    specKit.jvm % Test,
   )
   .settings(commonSettings *)
   .settings(scala3LibrarySettings *)
   .settings(
     name := "eo-avro",
+    // The specs lean on implicit conversions throughout; one flag instead of a language import
+    // in every file.
+    Test / scalacOptions += "-language:implicitConversions",
     libraryDependencies += cats.value,
     libraryDependencies += kindlingsAvro,
     // Pin apache-avro explicitly even though kindlings-avro-derivation
@@ -985,15 +1025,20 @@ lazy val jsoniterIntegration = eoCross(
     // avro/src/test instead.
     // MacroSelectors for the `.field(_.x)` / `.at` / `.each` cursor macros, same as circeIntegration.
     .dependsOn(core, generics, laws % Test)
+    .jvmConfigure(_.dependsOn(specKit.jvm % Test))
+    .jsConfigure(_.dependsOn(specKit.js % Test))
 )
   .settings(
     name := "eo-jsoniter",
+    // The specs lean on implicit conversions; one flag instead of a language import per file.
+    Test / scalacOptions += "-language:implicitConversions",
     libraryDependencies += cats.value,
     libraryDependencies += jsoniterCore.value,
-    // -macros is Test-scoped: the optic factory only needs
-    // `JsonValueCodec[A]` evidence at the call site, and the spec
-    // derives codecs for fixtures via JsonCodecMaker.make.
-    libraryDependencies += jsoniterMacros.value % Test,
+    // The optic factories only need `JsonValueCodec[A]` evidence. `JsoniterCodec.derived` is an
+    // inline call of jsoniter-scala's derivation macro: it expands at the caller, who needs
+    // jsoniter-scala-macros anyway to derive a codec. Optional keeps it off the published
+    // dependencies (the specs get it through Compile).
+    libraryDependencies += jsoniterMacros.value % Optional,
   )
 
 // Iron integration: every runtime-checkable refinement (`RuntimeConstraint[A, C]`) becomes a lawful
@@ -1156,7 +1201,7 @@ lazy val sparkJvmOptions = Seq(
 lazy val sparkBench: Project = project
   .in(file("spark-bench"))
   .enablePlugins(JmhPlugin)
-  .dependsOn(LocalProject("sparkIntegration") % "compile->test")
+  .dependsOn(benchKit, LocalProject("sparkIntegration") % "compile->test")
   .settings(commonSettings *)
   .settings(
     name := "eo-spark-bench",
@@ -1228,6 +1273,7 @@ lazy val docs: Project = project
   .in(file("site"))
   .enablePlugins(TypelevelSitePlugin)
   .dependsOn(
+    sampleKit.jvm,
     core.jvm,
     generics.jvm,
     circeIntegration.jvm,
@@ -1440,6 +1486,18 @@ lazy val unidocs: Project = project
     ),
   )
 
+// The shared JMH configuration (`JmhDefaults`) every bench module's classes extend; JMH reads
+// the annotations off superclasses. Unpublished, not in the root aggregate. JmhPlugin is enabled
+// only for its jmh-core dependency, so the version stays the plugin's.
+lazy val benchKit: Project = project
+  .in(file("bench-kit"))
+  .enablePlugins(JmhPlugin)
+  .settings(commonSettings *)
+  .settings(
+    name := "eo-bench-kit",
+    publish / skip := true,
+  )
+
 // Benchmarks deliberately stay OUT of the root aggregator: they're a
 // JMH harness rather than a test, and we don't want `sbt test` or
 // `sbt compile` to drag the JMH machinery / monocle dep in. Run them
@@ -1448,6 +1506,8 @@ lazy val benchmarks: Project = project
   .in(file("benchmarks"))
   .enablePlugins(JmhPlugin)
   .dependsOn(
+    benchKit,
+    sampleKit.jvm,
     core.jvm,
     generics.jvm,
     schemes.jvm,
@@ -1549,6 +1609,7 @@ lazy val demoUplcJvmBench: Project = project
   .in(file("demos/uplc-jvm-bench"))
   .enablePlugins(JmhPlugin)
   .dependsOn(
+    benchKit,
     LocalProject("demoUplcJvm"),
     LocalProject("demoUplcJvmValidators"),
   )
@@ -1604,16 +1665,15 @@ lazy val demoGrpcFilter: Project = project
 lazy val demoGrpcFilterBench: Project = project
   .in(file("demos/grpc-filter-bench"))
   .enablePlugins(JmhPlugin)
-  .dependsOn(LocalProject("demoGrpcFilter"))
+  .dependsOn(benchKit, LocalProject("demoGrpcFilter"))
   .settings(commonSettings *)
   .settings(
     name := "eo-demo-grpc-filter-bench",
     publish / skip := true,
   )
 
-// Single source of truth for the JMH invocation (the config that the per-class
-// annotations pin — see JmhDefaults' Phase-4 note for why that preamble can't be
-// DRY'd). Append a filter: `sbt "bench .*OrderAvroBench.*"`.
+// Single source of truth for the JMH invocation (the config `JmhDefaults`' annotations
+// pin). Append a filter: `sbt "bench .*OrderAvroBench.*"`.
 addCommandAlias("bench", "benchmarks/Jmh/run -i 5 -wi 3 -f 3 -t 1")
 addCommandAlias("benchQuick", "benchmarks/Jmh/run -i 3 -wi 2 -f 1 -t 1")
 

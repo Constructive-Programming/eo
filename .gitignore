@@ -15,6 +15,8 @@
 .metals/
 target/
 metals.sbt
+# Local sbt-git workaround for worktrees (written by orca.yaml's setup script)
+zz-local-worktree.sbt
 jmh-result.*
 # JMH result files (local runs + the benchmarks.yml CI artifact)
 benchmarks/*-results.json

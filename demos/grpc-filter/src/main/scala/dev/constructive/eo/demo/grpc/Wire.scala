@@ -1,9 +1,7 @@
 package dev.constructive.eo.demo.grpc
 
-import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
-import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
 import dev.constructive.eo.data.Affine
-import dev.constructive.eo.jsoniter.{JsonSlice, JsoniterPrism}
+import dev.constructive.eo.jsoniter.{JsonSlice, JsoniterCodec, JsoniterPrism}
 import dev.constructive.eo.optics.Optic
 import fs2.Chunk
 
@@ -34,16 +32,16 @@ object Wire:
   opaque type DetailJson = JsonSlice
 
   // Typing a path needs a codec for every object on it; only the leaf's ever decodes anything.
-  private given JsonValueCodec[Detail.Bug] = JsonCodecMaker.make
-  private given JsonValueCodec[Detail.Incident] = JsonCodecMaker.make
-  private given JsonValueCodec[Detail.Request] = JsonCodecMaker.make
-  private given JsonValueCodec[Trace] = JsonCodecMaker.make
-  private given JsonValueCodec[List[Frame]] = JsonCodecMaker.make
-  private given JsonValueCodec[Frame] = JsonCodecMaker.make
-  private given JsonValueCodec[Impact] = JsonCodecMaker.make
-  private given JsonValueCodec[Service] = JsonCodecMaker.make
-  private given JsonValueCodec[Customer] = JsonCodecMaker.make
-  private given JsonValueCodec[Contract] = JsonCodecMaker.make
+  private given JsoniterCodec[Detail.Bug] = JsoniterCodec.derived
+  private given JsoniterCodec[Detail.Incident] = JsoniterCodec.derived
+  private given JsoniterCodec[Detail.Request] = JsoniterCodec.derived
+  private given JsoniterCodec[Trace] = JsoniterCodec.derived
+  private given JsoniterCodec[List[Frame]] = JsoniterCodec.derived
+  private given JsoniterCodec[Frame] = JsoniterCodec.derived
+  private given JsoniterCodec[Impact] = JsoniterCodec.derived
+  private given JsoniterCodec[Service] = JsoniterCodec.derived
+  private given JsoniterCodec[Customer] = JsoniterCodec.derived
+  private given JsoniterCodec[Contract] = JsoniterCodec.derived
 
   /** A message as the optics read it: a view of its bytes where they lie, nothing copied (fs2's
     * `toByteBuffer` wraps an array slice's own array).

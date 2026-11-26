@@ -32,7 +32,7 @@ object AvroPrismMacro:
     MacroSelectors.requireCaseField[A]("AvroPrism.field", name)
     val declIdx = declIndexOf[A](name)
 
-    // CPD-OFF — the `.field` emission: same four resolver arguments at every selector site.
+    // The `.field` emission: same four resolver arguments at every selector site.
     '{
       $parent.widenPath[B](
         ${ Expr(name) },
@@ -41,7 +41,6 @@ object AvroPrismMacro:
         ${ slotsOf[A] },
       )(using $codecB)
     }
-  // CPD-ON
 
   /** Drives `codecPrism[Person].name`. Looks `name` up on `A`'s schema, summons `AvroCodec[B]`,
     * emits `widenPath`. Returns `Expr[Any]` so `transparent inline` refines per call site.
@@ -50,7 +49,7 @@ object AvroPrismMacro:
       parent: Expr[AvroPrism[A]],
       nameE: Expr[String],
   )(using q: Quotes): Expr[Any] =
-    // CPD-OFF — the dynamic-sugar call: same backbone and the same four resolver arguments as `.field`.
+    // The dynamic-sugar call: same backbone and the same four resolver arguments as `.field`.
     selectDynamicCommon[A](
       "AvroPrism selectDynamic",
       nameE,
@@ -64,7 +63,6 @@ object AvroPrismMacro:
         )(using $codecB)
       }
     }
-    // CPD-ON
 
   /** Macro for `.at(i)`. Verifies `A <: Iterable`, extracts the element type, summons the codec,
     * emits `widenPathIndex`.
@@ -225,7 +223,7 @@ object AvroPrismMacro:
     MacroSelectors.requireCaseField[A]("AvroTraversal.field", name)
     val declIdx = declIndexOf[A](name)
 
-    // CPD-OFF — the `.field` emission: same four resolver arguments at every selector site.
+    // The `.field` emission: same four resolver arguments at every selector site.
     '{
       $parent.widenSuffix[B](
         ${ Expr(name) },
@@ -234,7 +232,6 @@ object AvroPrismMacro:
         ${ slotsOf[A] },
       )(using $codecB)
     }
-  // CPD-ON
 
   /** Traversal counterpart to [[atImpl]] — extends the suffix by an array index. */
   def atTraversalImpl[A: Type](
@@ -251,7 +248,7 @@ object AvroPrismMacro:
         )
         '{ $parent.widenSuffixIndex[b]($iE)(using $codecB) }
 
-  // CPD-OFF — the two `.fields` emissions (prism / traversal) pass the same four resolver inputs to
+  // The two `.fields` emissions (prism / traversal) pass the same four resolver inputs to
   // `toFieldsPrism` / `toFieldsTraversal`; the calls read alike by construction.
   /** `.fields(_.a, _.b, ...)` — multi-field focus. Validates arity ≥ 2, duplicate-ness, known
     * fields, non-nested. Synthesises an NT in SELECTOR order, summons `AvroCodec[NT]`, emits
@@ -298,15 +295,13 @@ object AvroPrismMacro:
         }
     }
 
-  // CPD-ON
-
   /** Traversal counterpart to [[selectFieldImpl]] — drives Dynamic sugar by extending the suffix.
     */
   def selectFieldTraversalImpl[A: Type](
       parent: Expr[AvroTraversal[A]],
       nameE: Expr[String],
   )(using q: Quotes): Expr[Any] =
-    // CPD-OFF — the dynamic-sugar call: same backbone and the same four resolver arguments as `.field`.
+    // The dynamic-sugar call: same backbone and the same four resolver arguments as `.field`.
     selectDynamicCommon[A](
       "AvroTraversal selectDynamic",
       nameE,
@@ -319,9 +314,7 @@ object AvroPrismMacro:
           ${ slotsOf[A] },
         )(using $codecB)
       }
-    // CPD-ON
     }
-    // CPD-ON
 
   /** Shared backbone for [[fieldsImpl]] / [[fieldsTraversalImpl]] — validation + SELECTOR-order
     * NamedTuple synthesis live in the shared `MacroSelectors.fieldsSelectorNT` (eo-generics); this

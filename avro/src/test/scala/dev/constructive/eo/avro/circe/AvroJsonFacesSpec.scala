@@ -1,15 +1,9 @@
-package dev.constructive.eo.avro.circe
+package dev.constructive.eo
+package avro
+package circe
 
-import dev.constructive.eo.avro.{codecPrism, AvroBinaryCursor, AvroCodec}
 import dev.constructive.eo.circe.JsonPrism
-import dev.constructive.eo.optics.Optic.*
-import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
 import io.circe.{Decoder, Encoder, Json}
-import java.io.ByteArrayOutputStream
-import org.apache.avro.Schema
-import org.apache.avro.generic.{GenericDatumWriter, IndexedRecord}
-import org.apache.avro.io.EncoderFactory
-import org.specs2.mutable.Specification
 
 /** Behaviour of the drilled cursor faces on the circe bridge — `.json` on `AvroPrism` /
   * `AvroTraversal` (Avro bytes drilled, whole document out as [[io.circe.Json]]) and the reverse
@@ -30,11 +24,7 @@ class AvroJsonFacesSpec extends Specification:
   def bagRec(b: Bag): IndexedRecord = bagCodec.encode(b).asInstanceOf[IndexedRecord]
 
   def toAvroBinary(rec: IndexedRecord): Array[Byte] =
-    val out = new ByteArrayOutputStream()
-    val encoder = EncoderFactory.get().binaryEncoder(out, null)
-    new GenericDatumWriter[IndexedRecord](rec.getSchema).write(rec, encoder)
-    encoder.flush()
-    out.toByteArray
+    AvroBinaryCursor.writeDatum(rec, rec.getSchema)
 
   ".json face" should {
     "read the typed focus and modify the whole document out as Json" in {

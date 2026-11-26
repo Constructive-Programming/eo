@@ -2,9 +2,8 @@ package dev.constructive.eo
 
 import cats.instances.int.given
 import cats.instances.list.given
-import org.specs2.mutable.Specification
 
-import optics.{At, Each, Index, Iso, Traversal}
+import optics.{At, Each, Index}
 import laws.{LensLaws, OptionalLaws}
 import laws.discipline.{LensTests, OptionalTests}
 

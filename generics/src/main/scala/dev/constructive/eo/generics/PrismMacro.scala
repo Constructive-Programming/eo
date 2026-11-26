@@ -28,11 +28,9 @@ object PrismMacro:
   ): Expr[MendTearPrism[S, S, A, A]] =
     new HearthPrismMacro(q).derivePrism[S, A]
 
-final private class HearthPrismMacro(q: Quotes) extends _root_.hearth.MacroCommonsScala3(using q):
+final private class HearthPrismMacro(q: Quotes) extends HearthMacro(q):
 
   import quotes.reflect.*
-  import _root_.hearth.fp.Id
-  import _root_.hearth.fp.instances.*
 
   def derivePrism[S, A <: S](using
       Type[S],

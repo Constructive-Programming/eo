@@ -2,18 +2,13 @@ package dev.constructive.eo
 package bench
 package fixture
 
-import dev.constructive.eo.avro.{codecPrism, AvroCodec, AvroPrism}
-import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
 import java.io.ByteArrayOutputStream
 import java.util.ArrayList
 import org.apache.avro.Schema
-import org.apache.avro.generic.{
-  GenericDatumReader,
-  GenericDatumWriter,
-  GenericRecord,
-  IndexedRecord
-}
+import org.apache.avro.generic.{GenericDatumReader, GenericDatumWriter, GenericRecord}
 import org.apache.avro.io.{DecoderFactory, EncoderFactory}
+
+import avro.{codecPrism, AvroCodec, AvroPrism}
 
 /** Conversion-pipeline-shaped fixtures for `AvroBytesBench` — deliberately NOT toy records.
   *

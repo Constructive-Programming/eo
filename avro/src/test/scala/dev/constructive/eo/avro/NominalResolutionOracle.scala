@@ -1,8 +1,7 @@
-package dev.constructive.eo.avro
+package dev.constructive.eo
+package avro
 
 import scala.annotation.tailrec
-
-import org.apache.avro.Schema
 
 /** A VERBATIM copy of the scan-shaped nominal rung as PR #98 shipped it, frozen here as a
   * differential oracle for issue #103.

@@ -1,26 +1,13 @@
 package dev.constructive.eo
 
 import scala.collection.immutable.ArraySeq
-import scala.language.implicitConversions
 
 import cats.instances.arraySeq.given
 import cats.instances.list.given
 import cats.instances.vector.given
-import org.specs2.mutable.Specification
 
 import data.PSVec
-import optics.{
-  BijectionIso,
-  GetReplaceLens,
-  Getter,
-  Lens,
-  MendTearPrism,
-  Optic,
-  Optional,
-  PickMendPrism,
-  SplitCombineLens,
-  Traversal
-}
+import optics.{BijectionIso, GetReplaceLens, MendTearPrism, PickMendPrism, SplitCombineLens}
 
 /** Dedicated coverage for the 21 fused `.andThen` overloads on the concrete optic subclasses
   * (`BijectionIso`, `MendTearPrism`, `PickMendPrism`, `GetReplaceLens`, `Optional`).

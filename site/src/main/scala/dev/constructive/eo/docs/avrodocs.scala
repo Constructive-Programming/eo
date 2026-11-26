@@ -1,4 +1,5 @@
-package dev.constructive.eo.docs.avrodocs
+package dev.constructive.eo.docs
+package avrodocs
 
 // ADTs for site/docs/integrations/avro.md, with their kindlings-derived
 // codec triplets. Hosted in compiled sources (own sub-package so the
@@ -40,7 +41,6 @@ object Transaction:
   given AvroDecoder[Transaction] = AvroDecoder.derived
   given AvroSchemaFor[Transaction] = AvroSchemaFor.derived
 
-type NameAge = NamedTuple.NamedTuple[("name", "age"), (String, Int)]
 given AvroEncoder[NameAge] = AvroEncoder.derived
 given AvroDecoder[NameAge] = AvroDecoder.derived
 given AvroSchemaFor[NameAge] = AvroSchemaFor.derived

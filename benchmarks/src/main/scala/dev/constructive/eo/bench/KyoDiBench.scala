@@ -1,11 +1,8 @@
 package dev.constructive.eo
 package bench
 
-import java.util.concurrent.TimeUnit
-
-import org.openjdk.jmh.annotations.*
-
 import _root_.kyo.{Env, TypeMap, Var}
+
 import bench.fixture.{DiDb, DiMetrics}
 import kyo.*
 import optics.Lens
@@ -20,12 +17,6 @@ import optics.Lens
   *     effectful op (kyo's pure eval is cheap enough to keep the delta visible, unlike a per-op ZIO
   *     `Unsafe.run`).
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
 class KyoDiBench extends JmhDefaults:
 
   private val db = DiDb("jdbc:h2", 4)

@@ -1,11 +1,7 @@
-package dev.constructive.eo.avro
+package dev.constructive.eo
+package avro
 
-import scala.language.implicitConversions
-
-import java.util.{ArrayList, Arrays, LinkedHashMap, List as JList}
-import org.apache.avro.Schema
-import org.apache.avro.generic.{GenericData, GenericRecord, IndexedRecord}
-import org.specs2.mutable.Specification
+import java.util.{Arrays, LinkedHashMap, List as JList}
 
 /** Direct walker tests for [[AvroWalk]] — covers the four reachable Avro shapes (records, arrays,
   * maps, union alternatives) on both the strict and lenient policies, plus the round-trip

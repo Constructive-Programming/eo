@@ -1,10 +1,7 @@
-package dev.constructive.eo.jsoniter
+package dev.constructive.eo
+package jsoniter
 
 import scala.annotation.tailrec
-
-import org.scalacheck.{Gen, Prop}
-import org.specs2.ScalaCheck
-import org.specs2.mutable.Specification
 
 /** Grammar-sweep and robustness specs for [[JsonPathScanner]] — a structural scanner property that
   * checks every prefix of a generated document against a model (absolute spans, in-bounds spans,

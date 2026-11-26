@@ -1,8 +1,5 @@
-package dev.constructive.eo.jsoniter
-
-import org.scalacheck.{Gen, Prop}
-import org.specs2.ScalaCheck
-import org.specs2.mutable.Specification
+package dev.constructive.eo
+package jsoniter
 
 /** Round-trip and boundary specs for [[PathParser]] — full grammar coverage via render/reparse, an
   * exhaustive ASCII ident-start/-part sweep, and pinned error-path examples. See per-block `covers`

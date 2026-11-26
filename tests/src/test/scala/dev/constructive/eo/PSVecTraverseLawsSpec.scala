@@ -5,11 +5,8 @@ import cats.kernel.laws.IsEq
 import cats.laws.discipline.TraverseTests
 import cats.{Eq, Traverse}
 import org.scalacheck.Prop.forAll
-import org.scalacheck.{Arbitrary, Gen, Prop}
-import org.specs2.mutable.Specification
 import org.typelevel.discipline.Laws
 
-import optics.Traversal
 import optics.Optic.*
 import data.{MultiFocus, PSVec}
 import laws.eo.ModifyAListLaws

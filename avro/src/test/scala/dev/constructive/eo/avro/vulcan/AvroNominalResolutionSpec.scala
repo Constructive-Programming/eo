@@ -1,10 +1,6 @@
-package dev.constructive.eo.avro.vulcan
-
-import scala.language.implicitConversions
-
-import dev.constructive.eo.avro.{codecPrism, AvroCodec}
-import org.apache.avro.generic.{GenericRecord, IndexedRecord}
-import org.specs2.mutable.Specification
+package dev.constructive.eo
+package avro
+package vulcan
 
 /** The gate for schema-field resolution (`AvroWalk.fieldNameAt`) — issue #95.
   *

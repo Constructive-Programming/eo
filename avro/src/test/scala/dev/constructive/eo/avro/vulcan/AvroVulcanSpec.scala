@@ -1,13 +1,10 @@
-package dev.constructive.eo.avro.vulcan
+package dev.constructive.eo
+package avro
+package vulcan
 
-import scala.language.implicitConversions
-
-import _root_.vulcan.Codec as VCodec
 import cats.syntax.all.*
-import dev.constructive.eo.avro.circe.AvroJson
-import dev.constructive.eo.avro.{codecPrism, AvroCodec}
-import org.apache.avro.generic.IndexedRecord
-import org.specs2.mutable.Specification
+
+import circe.AvroJson
 
 // Top-level so the vulcan record codec and the derived prisms see a plain classfile.
 case class Combo(name: String, size: Long, active: Boolean)

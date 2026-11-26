@@ -1,6 +1,7 @@
-package dev.constructive.eo.avro.vulcan
+package dev.constructive.eo
+package avro
+package vulcan
 
-import _root_.vulcan.Codec as VCodec
 import cats.syntax.all.*
 import java.time.Instant
 

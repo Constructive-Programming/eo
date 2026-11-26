@@ -3,7 +3,6 @@ package bench
 package fixture
 
 import cats.instances.list.given
-import monocle.{Lens as MLens, Traversal as MTraversal}
 
 /** Monocle optics over the decoded canonical [[Order]], shared by every integration bench's
   * `monocle*` baseline (circe / jsoniter / avro).

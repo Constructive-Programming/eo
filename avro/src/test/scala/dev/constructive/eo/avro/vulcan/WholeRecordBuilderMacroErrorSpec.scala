@@ -1,8 +1,8 @@
-package dev.constructive.eo.avro.vulcan
+package dev.constructive.eo
+package avro
+package vulcan
 
 import scala.compiletime.testing.typeCheckErrors
-
-import org.specs2.mutable.Specification
 
 /** Compile-error catalogue for `AvroVulcan.recordBuilder` — the two refusals the macro owns (the
   * rest are construction-time, covered by [[WholeRecordBuilderSpec]]). Substring-matched like

@@ -2,14 +2,13 @@ package dev.constructive.eo
 package bench
 package fixture
 
-import dev.constructive.eo.optics.{
+import optics.{
   Getter as EoGetter,
   Lens as EoLens,
   Modify as EoModify,
   Optional as EoOptional,
   Review as EoReview
 }
-import monocle.{Getter as MGetter, Lens as MLens, Optional as MOptional, Setter as MSetter}
 
 /** Pre-built EO and Monocle lenses / optionals over the [[Nested]] case-class chain. The
   * `OptionalBench`, `AffineFoldBench`, and any future bench that wants the same depth-0/3/6 shape

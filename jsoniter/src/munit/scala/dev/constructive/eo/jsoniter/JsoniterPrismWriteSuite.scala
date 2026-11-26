@@ -1,7 +1,5 @@
 package dev.constructive.eo.jsoniter
 
-import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
-import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
 import dev.constructive.eo.data.Affine
 import dev.constructive.eo.optics.Optic
 import dev.constructive.eo.optics.Optic.*
@@ -17,12 +15,11 @@ import dev.constructive.eo.optics.Optic.*
   * `.modify` / `.replace` light up via `ForgetfulFunctor[Affine]` (in `Affine.given`); no new
   * typeclass shipping needed — the splice lives in the optic's `from` closure.
   */
-import JsoniterPathFixtures.prism
 
 class JsoniterPrismWriteSuite extends munit.FunSuite:
 
-  given longCodec: JsonValueCodec[Long] = JsonCodecMaker.make
-  given stringCodec: JsonValueCodec[String] = JsonCodecMaker.make
+  given longCodec: JsoniterCodec[Long] = JsoniterCodec.derived
+  given stringCodec: JsoniterCodec[String] = JsoniterCodec.derived
 
   private def bytes(s: String): Array[Byte] = s.getBytes("UTF-8")
   private def str(b: Array[Byte]): String = new String(b, "UTF-8")
@@ -32,10 +29,10 @@ class JsoniterPrismWriteSuite extends munit.FunSuite:
   )
 
   private val idP: Optic[Array[Byte], Array[Byte], Long, Long, Affine] =
-    prism[Long]("$.payload.user.id")
+    JsoniterPrism.path[Long]("$.payload.user.id")
 
   private val emailP: Optic[Array[Byte], Array[Byte], String, String, Affine] =
-    prism[String]("$.payload.user.email")
+    JsoniterPrism.path[String]("$.payload.user.email")
 
   test(".replace: same-length scalar — splices, surrounding bytes preserved") {
     assertEquals(
@@ -74,7 +71,7 @@ class JsoniterPrismWriteSuite extends munit.FunSuite:
 
   test(".replace: miss path — write-back is no-op") {
     val absentP: Optic[Array[Byte], Array[Byte], Long, Long, Affine] =
-      prism[Long]("$.payload.user.absent")
+      JsoniterPrism.path[Long]("$.payload.user.absent")
     assertEquals(absentP.replace(99L)(sample).toSeq, sample.toSeq)
   }
 
@@ -91,7 +88,7 @@ class JsoniterPrismWriteSuite extends munit.FunSuite:
 
   test(".replace at array index — splices the indexed element") {
     val secondP: Optic[Array[Byte], Array[Byte], Long, Long, Affine] =
-      prism[Long]("$.payload.items[1]")
+      JsoniterPrism.path[Long]("$.payload.items[1]")
     assertEquals(
       str(secondP.replace(20L)(sample)),
       """{"payload":{"user":{"id":42,"email":"alice@example.com"},"items":[1,20,3]}}""",

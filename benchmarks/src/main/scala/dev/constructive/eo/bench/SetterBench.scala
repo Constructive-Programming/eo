@@ -1,9 +1,7 @@
 package dev.constructive.eo
 package bench
 
-import dev.constructive.eo.bench.fixture.*
-import java.util.concurrent.TimeUnit
-import org.openjdk.jmh.annotations.*
+import fixture.*
 
 /** `Modify.modify` (eo's write-only family, named `Setter` in Monocle) at the leaf plus deep
   * composition, paired EO vs Monocle.
@@ -15,12 +13,6 @@ import org.openjdk.jmh.annotations.*
   * Monocle's `mS3.andThen(mS2)…`) and dispatch through it once, rather than hand-nesting `modify`
   * on the EO side.
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
 class SetterBench extends JmhDefaults:
 
   import NestedOptics.{

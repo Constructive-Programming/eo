@@ -1,9 +1,7 @@
-package dev.constructive.eo.avro
+package dev.constructive.eo
+package avro
 
 import scala.compiletime.testing.typeCheckErrors
-
-import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
-import org.specs2.mutable.Specification
 
 /** Compile-error catalogue for `AvroPrism.fields` (D10). Every row of the plan's D10 table has an
   * exact-message test here, exercised via `scala.compiletime.testing.typeCheckErrors`.

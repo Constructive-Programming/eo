@@ -155,8 +155,8 @@ final class AvroTraversal[A] private[avro] (
 
   // ---- Path extension (used by field / at / selectDynamic macros) --
 
-  // CPD-OFF — see `AvroPrism`'s fence: the traversal's path-extension plumbing mirrors the prism's
-  // by design, parameter for parameter.
+  // See `AvroPrism`'s note: the traversal's path-extension plumbing mirrors the prism's by design,
+  // parameter for parameter.
   /** Extend the per-element suffix by a named field. `slots` is the ELEMENT type's
     * sentinel-synthesiser ([[AvroProbe.Slots]]), BY NAME so a cached verdict never builds one; the
     * probe resolves against the element record this traversal's prefix already points at.
@@ -254,8 +254,6 @@ final class AvroTraversal[A] private[avro] (
       new AvroFocus.Fields[B](suffix, resolved, codecB),
       rootSchemaCached,
     )
-
-  // CPD-ON
 
 end AvroTraversal
 

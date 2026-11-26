@@ -269,9 +269,9 @@ final class AvroPrism[A] private[avro] (
 
   // ---- Path widening (used by macro extensions) ---------------------
 
-  // CPD-OFF — the path-extension plumbing is a MIRROR of `AvroTraversal`'s: one resolver entry, one
-  // step append, one Fields batch. The two classes deliberately read alike (same parameters, same
-  // order, same rules) so a change to one is obviously a change to the other.
+  // The path-extension plumbing is a MIRROR of `AvroTraversal`'s: one resolver entry, one step
+  // append, one Fields batch. The two classes deliberately read alike (same parameters, same order,
+  // same rules) so a change to one is obviously a change to the other.
   /** Extend the Leaf path by a field step. Used by [[field]] / `selectDynamic`. `scalaName` is the
     * case-class field name, `declIdx` its declaration index and `caseNames` the parent's whole
     * case-field list; the actual schema field name (which may differ under a snake/custom transform
@@ -374,7 +374,6 @@ final class AvroPrism[A] private[avro] (
         parent => AvroProbe.fieldNameByChange(codec, slots, declIdxs(i), parent),
       )
     )
-  // CPD-ON
 
   /** Hand off as an `AvroTraversal[B]` over the iterated element type. Used by `.each`. */
   private[avro] def toTraversal[B](using codecB: AvroCodec[B]): AvroTraversal[B] =

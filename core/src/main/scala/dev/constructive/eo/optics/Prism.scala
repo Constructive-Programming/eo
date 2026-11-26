@@ -98,8 +98,6 @@ final class MendTearPrism[S, T, A, B](
         case Right(a) => mend(f(a))
         case Left(t)  => t
 
-  // CPD-OFF — one `CanModifyFP` contract, a fused body per carrier: the signature repeats in every
-  // concrete optic that implements it.
   /** Fused effectful modify: a hit maps `mend` over the effect, a miss is `pure` of the untouched
     * `T`.
     */
@@ -108,7 +106,6 @@ final class MendTearPrism[S, T, A, B](
       tear(s) match
         case Right(a) => G.map(f(a))(mend)
         case Left(t)  => G.pure(t)
-  // CPD-ON
 
   override inline def replace(b: B): S => T =
     s =>
@@ -138,23 +135,34 @@ final class MendTearPrism[S, T, A, B](
     * outer-hit threads through `innerTear` (read) and `innerMend` (write). `inline` so the call
     * site allocates the same single `MendTearPrism` a hand-fused compose would.
     */
+  /** One outer `tear`: how every fused composition with this prism outside starts. `inline`, with
+    * `inline` branches, so each call site expands to the match.
+    */
+  private[optics] inline def onTear[R](s: S)(inline miss: T => R)(inline hit: A => R): R =
+    tear(s) match
+      case Right(a) => hit(a)
+      case Left(t)  => miss(t)
+
+  /** [[onTear]] for the composite's read: a miss re-uses the outer's own `Left`, allocating none.
+    */
+  private[optics] inline def readTear[C](s: S)(inline hit: A => Either[T, C]): Either[T, C] =
+    tear(s) match
+      case l @ Left(_) => l.widenRight[C]
+      case Right(a)    => hit(a)
+
   private inline def fuseToMendTear[C, D](
       innerTear: A => Either[T, C],
       innerMend: D => B,
   ): MendTearPrism[S, T, C, D] =
     new MendTearPrism(
-      tear = s =>
-        tear(s) match
-          case l @ Left(_) => l.widenRight[C]
-          case Right(a)    => innerTear(a),
+      tear = s => readTear(s)(innerTear),
       mend = d => mend(innerMend(d)),
     )
 
-  // CPD-OFF — the fused `andThen` matrix: one overload per inner optic, each a carrier-specific
-  // kernel. Measured against the generic `AssociativeFunctor` / `Morph` route (AndThenBench, see the
-  // 2.0 CHANGELOG): never more B/op per call, and only they keep a chain in concrete classes — the
-  // generic route allocates per level (lens∘lens depth 6: 528 vs 120 B/op). The signatures and
-  // the `Optional.fused(…)` shape repeat across them by construction.
+  // The fused `andThen` matrix: one overload per inner optic, each a carrier-specific kernel.
+  // Measured against the generic `AssociativeFunctor` / `Morph` route (AndThenBench, see the 2.0
+  // CHANGELOG): never more B/op per call, and only they keep a chain in concrete classes — the
+  // generic route allocates per level (lens∘lens depth 6: 528 vs 120 B/op).
   /** Fused `Prism.andThen(Prism)` — composed tear + `mend = outer.mend ∘ inner.mend`, no nested
     * Either wrappers. Picked when both sides are statically `MendTearPrism`. `inline` so a deep
     * prism chain splices distinct lambdas per level, under C2's recursive-inline cap (see
@@ -182,10 +190,7 @@ final class MendTearPrism[S, T, A, B](
       ev: A =:= B
   ): MendTearPrism[S, T, C, D] =
     fuseToMendTear(
-      innerTear = a =>
-        inner.pick(a) match
-          case Some(c) => Right(c)
-          case None    => Left(mend(ev(a))),
+      innerTear = a => Optional.pickOr(inner.pick(a))(mend(ev(a))),
       innerMend = d => ev(inner.mend(d)),
     )
 
@@ -193,38 +198,23 @@ final class MendTearPrism[S, T, A, B](
   def andThen[C, D](inner: PLens[A, B, C, D]): Optional[S, T, C, D] =
     Optional.fused(
       getOrModify = s => tear(s).map(inner.get),
-      modify = (s, f) =>
-        tear(s) match
-          case Right(a) => mend(inner.enplace(a, f(inner.get(a))))
-          case Left(t)  => t,
-      to = s =>
-        tear(s) match
-          case Right(a) => new Affine.Hit[(T, A), C](a, inner.get(a))
-          case Left(t)  => new Affine.Miss[(T, A)](t),
+      modify = (s, f) => onTear(s)(identity)(a => mend(inner.enplace(a, f(inner.get(a))))),
+      to =
+        s => onTear[Affine[(T, A), C]](s)(new Affine.Miss(_))(a => new Affine.Hit(a, inner.get(a))),
       rebuild = (a, d) => mend(inner.enplace(a, d)),
     )
 
   /** Fused `Prism.andThen(Optional)` — nested partial focuses. */
   def andThen[C, D](inner: Optional[A, B, C, D]): Optional[S, T, C, D] =
     Optional.fused(
-      getOrModify = s =>
-        tear(s) match
-          case l @ Left(_) => l.widenRight[C]
-          case Right(a)    =>
-            Optional.liftMiss(inner.getOrModify(a))(mend),
-      modify = (s, f) =>
-        tear(s) match
-          case Right(a) => mend(inner.modifyAt(a, f))
-          case Left(t)  => t,
+      getOrModify = s => readTear(s)(a => Optional.liftMiss(inner.getOrModify(a))(mend)),
+      modify = (s, f) => onTear(s)(identity)(a => mend(inner.modifyAt(a, f))),
       to = s =>
-        tear(s) match
-          case Left(t)  => new Affine.Miss[(T, inner.M)](t)
-          case Right(a) =>
-            Optional.liftTo(inner, a)(mend, identity),
+        onTear[Affine[(T, inner.M), C]](s)(new Affine.Miss(_))(a =>
+          Optional.liftThrough(inner, a)(mend)
+        ),
       rebuild = (mi, d) => mend(inner.rebuild(mi, d)),
     )
-
-  // CPD-ON
 
 /** Concrete Optic subclass for the `Option`-shaped Prism (`Prism.optional` / `Prism.pOptional`).
   * Stores `pick` and `mend` directly; the fused extensions pattern-match on `Option` so the hot
@@ -254,15 +244,12 @@ final class PickMendPrism[S, A, B](
         case Some(a) => mend(f(a))
         case None    => s
 
-  // CPD-OFF — one `CanModifyFP` contract, a fused body per carrier: the signature repeats in every
-  // concrete optic that implements it.
   /** Fused effectful modify: a hit maps `mend` over the effect, a miss is `pure(s)`. */
   def modifyF[G[_]](f: A => G[B])(using G: Applicative[G] & Functor[G]): S => G[S] =
     s =>
       pick(s) match
         case Some(a) => G.map(f(a))(mend)
         case None    => G.pure(s)
-  // CPD-ON
 
   override inline def replace(b: B): S => S =
     s =>
@@ -273,11 +260,10 @@ final class PickMendPrism[S, A, B](
   inline def getOption(s: S): Option[A] = pick(s)
   inline def reverseGet(b: B): S = mend(b)
 
-  // CPD-OFF — the fused `andThen` matrix: one overload per inner optic, each a carrier-specific
-  // kernel. Measured against the generic `AssociativeFunctor` / `Morph` route (AndThenBench, see the
-  // 2.0 CHANGELOG): never more B/op per call, and only they keep a chain in concrete classes — the
-  // generic route allocates per level (lens∘lens depth 6: 528 vs 120 B/op). The signatures and
-  // the `Optional.fused(…)` shape repeat across them by construction.
+  // The fused `andThen` matrix: one overload per inner optic, each a carrier-specific kernel.
+  // Measured against the generic `AssociativeFunctor` / `Morph` route (AndThenBench, see the 2.0
+  // CHANGELOG): never more B/op per call, and only they keep a chain in concrete classes — the
+  // generic route allocates per level (lens∘lens depth 6: 528 vs 120 B/op).
   /** Fused `PickMend.andThen(PickMend)` — outer mono in focus; preserves the Option-fast-path shape
     * rather than materialising an intermediate Either. `inline` so a deep fast-path prism chain
     * splices distinct lambdas per level, under C2's recursive-inline cap (see [[Getter.andThen]]).
@@ -349,5 +335,3 @@ final class PickMendPrism[S, A, B](
           case None    => new Affine.Miss[(S, A)](s),
       rebuild = (a, d) => mend(inner.enplace(a, d)),
     )
-
-  // CPD-ON

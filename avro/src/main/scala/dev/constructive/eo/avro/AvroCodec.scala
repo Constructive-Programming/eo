@@ -2,13 +2,10 @@ package dev.constructive.eo.avro
 
 import scala.util.control.NonFatal
 
-// CPD-OFF — shared Avro import prologue across the module; dropping the unused `GenericData`
-// selector is not new duplication.
 import cats.data.{Chain, Ior}
 import hearth.kindlings.avroderivation.{AvroConfig, AvroDecoder, AvroEncoder, AvroSchemaFor}
 import org.apache.avro.Schema
 import org.apache.avro.generic.{GenericDatumReader, GenericRecord, IndexedRecord}
-// CPD-ON
 import org.apache.avro.io.DecoderFactory
 
 /** A unified read/write/schema codec for Avro values, combining the kindlings-avro-derivation

@@ -11,15 +11,12 @@ import dev.constructive.eo.laws.discipline.TargetingTests
 import dev.constructive.eo.laws.{SeamLaws, TargetingLaws}
 import dev.constructive.eo.optics.Optic
 import java.util.Arrays
-// CPD-OFF — the specs2 + ScalaCheck law-spec import header every avro law spec repeats verbatim;
-// there is no shared trait to hoist it into (each spec mixes its own framework pair).
 import org.scalacheck.{Arbitrary, Cogen, Gen}
 import org.specs2.ScalaCheck
 import org.specs2.mutable.Specification
 import org.typelevel.discipline.specs2.mutable.Discipline
 
 import AvroSpecFixtures.Person
-// CPD-ON
 
 /** Issue #99 on the avro wire carrier: `.field(_.x)` checked against the CODEC's own accessor.
   *

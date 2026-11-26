@@ -3,14 +3,13 @@ package bench
 
 import scala.compiletime.uninitialized
 
-import dev.constructive.eo.bench.fixture.PlatedTrees.given
-import dev.constructive.eo.bench.fixture.{Bin, Expr, PlatedTrees}
 import dev.constructive.eo.circe.platedJson // EO Plated[Json]
-import dev.constructive.eo.optics.Plated as EoPlated
 import io.circe.Json
-import java.util.concurrent.TimeUnit
 import monocle.function.Plated as MPlated
-import org.openjdk.jmh.annotations.*
+
+import fixture.PlatedTrees
+import fixture.PlatedTrees.given
+import optics.Plated as EoPlated
 
 /** `Plated` recursion — the read side (`universe`, enumerate every sub-term) and the write side
   * (`transform`, bottom-up rebuild) — measured three ways:
@@ -43,12 +42,6 @@ import org.openjdk.jmh.annotations.*
   * every size here and at 100k in the stack-safety test; the recursive visitor shares Monocle's
   * call-stack ceiling and only survives because `n` is bounded.
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
 class PlatedBench extends JmhDefaults:
 
   @Param(Array("64", "512", "4096"))

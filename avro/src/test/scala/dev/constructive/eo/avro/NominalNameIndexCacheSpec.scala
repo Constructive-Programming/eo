@@ -1,10 +1,9 @@
-package dev.constructive.eo.avro
+package dev.constructive.eo
+package avro
 
 import scala.annotation.tailrec
 
 import java.lang.ref.WeakReference
-import org.apache.avro.Schema
-import org.specs2.mutable.Specification
 
 /** The cache contract behind the nominal rung's normalised-name index (issue #103).
   *

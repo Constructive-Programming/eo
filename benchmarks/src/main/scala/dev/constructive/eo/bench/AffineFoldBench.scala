@@ -1,10 +1,8 @@
 package dev.constructive.eo
 package bench
 
-import dev.constructive.eo.bench.fixture.*
-import dev.constructive.eo.optics.{AffineFold, PickFold}
-import java.util.concurrent.TimeUnit
-import org.openjdk.jmh.annotations.*
+import fixture.*
+import optics.{AffineFold, PickFold}
 
 /** `AffineFold.getOption` on a `Nested0.flag: Option[String]` focus at varying composition depth,
   * paired against Monocle's `Optional.getOption` (Monocle 3.x does not ship a standalone
@@ -23,12 +21,6 @@ import org.openjdk.jmh.annotations.*
   * A secondary EO-vs-EO comparison shows the specialisation win: the same read against a full
   * `Optional` (X = (S, S) shape) vs the `AffineFold` (X = (Unit, Unit) shape) at the leaf.
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
 class AffineFoldBench extends JmhDefaults:
 
   private val eoFlagAF: PickFold[Nested0, String] =

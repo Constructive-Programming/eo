@@ -1,17 +1,9 @@
-package dev.constructive.eo.avro
+package dev.constructive.eo
+package avro
 
-import scala.language.implicitConversions
+import java.util.Arrays
 
-import cats.data.Ior
-import dev.constructive.eo.data.Affine
-import dev.constructive.eo.optics.Optic.*
-import java.util.{ArrayList, Arrays}
-import org.apache.avro.Schema
-import org.apache.avro.generic.{GenericRecord, IndexedRecord}
-import org.scalacheck.Prop.forAll
-import org.scalacheck.{Arbitrary, Gen}
-import org.specs2.ScalaCheck
-import org.specs2.mutable.Specification
+import data.Affine
 
 /** Behaviour spec for [[AvroPrism]]'s wire-form surfaces: the byte-carried default optic (`to` /
   * `.modify` / `.replace` splice on the binary payload), `sliceBytes` (byte-span extraction,
@@ -112,7 +104,6 @@ class AvroBytesSpec extends Specification with ScalaCheck:
             .util
             .Arrays
             .equals(frag.bytes, toBinaryValue(java.lang.Long.valueOf(7L), frag.schema)) === true
-        // CPD-OFF — pre-existing specs2 match boilerplate across AvroBytesSpec; touched by *Unsafe removal (#101).
         val selfGraft = seqL.graftBytes(bytes, frag.bytes) match
           case Right(out) => Arrays.equals(out, bytes) === true
           case other      =>
@@ -121,7 +112,6 @@ class AvroBytesSpec extends Specification with ScalaCheck:
       case other =>
         org.specs2.execute.Failure(s"expected Right, got $other"): org.specs2.execute.Result
 
-        // CPD-ON
     // ---- union-branch focus: payment.union[Cash] ----
     val cashL = codecPrism[WireEnvelope].field(_.payment).union[Cash]
     val paymentSchema = envelopeSchema.getField("payment").schema
@@ -188,7 +178,6 @@ class AvroBytesSpec extends Specification with ScalaCheck:
     // own `.replace` (which re-encodes index + value under the union schema).
     val expected = paymentL.replace(Cash(100L))(outputBytes)
 
-    // CPD-OFF — pre-existing specs2 match boilerplate; touched by *Unsafe removal (#101).
     val grafted = cashL.graftBytes(outputBytes, frag.bytes)
     val graftOk = grafted match
       case Right(out) => Arrays.equals(out, expected) === true
@@ -209,7 +198,6 @@ class AvroBytesSpec extends Specification with ScalaCheck:
                 .execute
                 .Failure(s"expected Ior.Right, got $other"): org.specs2.execute.Result,
       )
-    // CPD-ON
 
     graftOk.and(decodedOk)
   }

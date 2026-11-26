@@ -4,10 +4,10 @@ package bench
 import scala.compiletime.uninitialized
 
 import com.github.plokhotnyuk.jsoniter_scala.core.{readFromArray, readFromSubArray, writeToArray}
+import dev.constructive.eo.bench.JmhDefaults
 import dev.constructive.eo.jsoniter.JsonSlice
 import dev.constructive.eo.optics.Optic.*
 import java.nio.charset.StandardCharsets.UTF_8
-import java.util.concurrent.TimeUnit
 import org.openjdk.jmh.annotations.*
 import org.openjdk.jmh.infra.Blackhole
 
@@ -22,14 +22,8 @@ import org.openjdk.jmh.infra.Blackhole
   * of the way in), or `first`, moved to the front. Decoding reads every byte either way; the scan
   * reads the bytes in front of the field.
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
 @OperationsPerInvocation(TriageBench.Pool)
-class TriageBench:
+class TriageBench extends JmhDefaults:
 
   @Param(Array("late", "first"))
   var layout: String = uninitialized

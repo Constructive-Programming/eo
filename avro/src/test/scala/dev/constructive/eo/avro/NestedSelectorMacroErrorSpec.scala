@@ -1,10 +1,7 @@
-package dev.constructive.eo.avro
+package dev.constructive.eo
+package avro
 
 import scala.compiletime.testing.typeCheckErrors
-import scala.language.implicitConversions
-
-import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
-import org.specs2.mutable.Specification
 
 // Fixture ADTs at top level (the eo-generics convention for macro-facing test types). The SHAPE is
 // the hazard: the inner record and the outer record BOTH carry a field named `y`, so a selector

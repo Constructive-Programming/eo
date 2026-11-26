@@ -2,7 +2,6 @@ package dev.constructive.eo
 package examples
 
 import io.circe.syntax.*
-import org.specs2.mutable.Specification
 
 import CrudRoundtrip.*
 

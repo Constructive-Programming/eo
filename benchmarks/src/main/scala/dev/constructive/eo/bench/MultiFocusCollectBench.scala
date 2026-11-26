@@ -3,11 +3,10 @@ package bench
 
 import cats.data.{Const, ZipList}
 import cats.{Functor, Representable}
-import dev.constructive.eo.data.MultiFocus
-import dev.constructive.eo.data.MultiFocus.{collectList, collectMap}
-import dev.constructive.eo.optics.{Indexed, Optic}
-import java.util.concurrent.TimeUnit
-import org.openjdk.jmh.annotations.*
+
+import data.MultiFocus
+import data.MultiFocus.{collectList, collectMap}
+import optics.{Indexed, Optic}
 
 /** `MultiFocus` aggregator (`collect*`) and indexed tuple benches — split out of the former
   * `MultiFocusBench` junk drawer (plan 009, Phase 3).
@@ -24,12 +23,6 @@ import org.openjdk.jmh.annotations.*
   *     `List(agg(fa))` regardless of input length.
   *   - **`Indexed` 3-/6-slot modify**: lawful finite-index tuple tabulation and rebuild.
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
 class MultiFocusCollectBench extends JmhDefaults:
 
   // ----- collectMap: ZipList column-wise mean (Functor-broadcast) -----

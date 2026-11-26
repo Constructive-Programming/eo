@@ -1,10 +1,9 @@
-package dev.constructive.eo.avro
+package dev.constructive.eo
+package avro
 
 import scala.annotation.tailrec
 
-import java.util.ArrayList
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
-import org.apache.avro.Schema
 
 /** Schema generators and a min-of-reps timer for the issue-#103 cost specs.
   *

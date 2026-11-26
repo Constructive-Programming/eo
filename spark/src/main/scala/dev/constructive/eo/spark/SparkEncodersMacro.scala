@@ -5,6 +5,7 @@ import scala.quoted.*
 import scala.quoted.Expr as QuotedExpr // hearth's `Expr` shadows it inside the macro class
 import scala.reflect.ClassTag
 
+import dev.constructive.eo.generics.HearthMacro
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.encoders.{AgnosticEncoder, Codec}
 import org.apache.spark.sql.catalyst.expressions.GenericRow
@@ -20,11 +21,9 @@ object SparkEncodersMacro:
   * straight from the row, with no `Mirror` and no intermediate `Product`. A NULL struct travels
   * through the codec as `null` both ways (Spark's NULL, not a missed optic focus).
   */
-final private class HearthEncoderMacro(q: Quotes) extends _root_.hearth.MacroCommonsScala3(using q):
+final private class HearthEncoderMacro(q: Quotes) extends HearthMacro(q):
 
   import quotes.reflect.*
-  import _root_.hearth.fp.Id
-  import _root_.hearth.fp.instances.*
 
   def derive[T](using Type[T]): Expr[AgnosticEncoder[T]] =
     val cc = CaseClass.parse[T].toEither match

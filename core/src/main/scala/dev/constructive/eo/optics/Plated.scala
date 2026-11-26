@@ -98,8 +98,6 @@ object Plated:
     * `mapChildren` / `rebuildArray` fast paths). `children(s)` must report the immediate children
     * in the order `rebuild` expects; `rebuild(s, kids)` consumes `kids` once and reassembles `s`.
     */
-  // CPD-OFF — the three `fromChildren` overloads and the carrier constructors restate the same
-  // delegation per arity; extracting would not remove the per-signature type plumbing.
   def fromChildren[S](
       children: S => Children[S],
       rebuildFn: (S, Children[S]) => S,
@@ -143,12 +141,10 @@ object Plated:
       rebuildArrayFn: (S, Array[Any]) => S,
       childrenArrayFn: S => Array[Any],
   ): Plated[S] =
-    new Plated[S]:
-      val plate: Optic[S, S, S, S, MultiFocus[PSVec]] =
-        Traversal.selfChildren(
-          s => Children.toPSVec(children(s)),
-          (s, vec) => rebuildFn(s, Children.fromPSVec(vec)),
-        )
+    new SelfChildrenPlated[S]:
+      override private[eo] def childrenVec(s: S): PSVec[S] = Children.toPSVec(children(s))
+      override private[eo] def rebuild(parent: S, kids: PSVec[S]): S =
+        rebuildFn(parent, Children.fromPSVec(kids))
       override def childrenView(s: S): Children[S] = children(s)
       override private[eo] def childrenArray(s: S): Array[Any] = childrenArrayFn(s)
       override def mapChildren(parent: S, g: S => S): S = mapChildrenFn(parent, g)
@@ -160,9 +156,7 @@ object Plated:
       childrenFn: S => PSVec[S],
       rebuildFn: (S, PSVec[S]) => S,
   ): Plated[S] =
-    new Plated[S]:
-      val plate: Optic[S, S, S, S, MultiFocus[PSVec]] =
-        Traversal.selfChildren(childrenFn, rebuildFn)
+    new SelfChildrenPlated[S]:
       override def childrenView(s: S): Children[S] = Children.fromPSVec(childrenFn(s))
       override private[eo] def childrenVec(s: S): PSVec[S] = childrenFn(s)
       // `childrenFn` must return a *freshly-allocated* vector (every shipped instance does —
@@ -181,13 +175,18 @@ object Plated:
       rebuildFn: (S, Array[Any]) => S,
   ): Plated[S] =
     new ArrayPlated[S](childrenFn, rebuildFn)
-  // CPD-ON
 
   private type ArrayChildrenFn[S] = S => Array[Any]
   private type ArrayRebuildFn[S] = (S, Array[Any]) => S
 
+  /** A [[Plated]] whose `plate` traverses through its own `childrenVec` / `rebuild`, which every
+    * subclass overrides — so reads and rebuilds skip the carrier, and the optic agrees with them.
+    */
+  abstract private class SelfChildrenPlated[S] extends Plated[S]:
+    val plate: Optic[S, S, S, S, MultiFocus[PSVec]] = Traversal.selfChildren(childrenVec, rebuild)
+
   private class ArrayPlated[S](kidsOf: ArrayChildrenFn[S], build: ArrayRebuildFn[S])
-      extends Plated[S]:
+      extends SelfChildrenPlated[S]:
     override def childrenView(s: S): Children[S] = Children.fromOwnedArray(kidsOf(s))
     override private[eo] def childrenVec(s: S): PSVec[S] = PSVec.unsafeWrap[S](kidsOf(s))
     override private[eo] def childrenArray(s: S): Array[Any] = kidsOf(s)
@@ -196,9 +195,6 @@ object Plated:
       build(parent, kids.unsafeShareableArray)
 
     override private[eo] def rebuildArray(parent: S, kids: Array[Any]): S = build(parent, kids)
-
-    val plate: Optic[S, S, S, S, MultiFocus[PSVec]] =
-      Traversal.selfChildren(childrenVec, rebuild)
 
   /** One internal node on a heap machine's stack ([[transform]] / [[transformM]] past their depth
     * budgets): the node's fresh children array, whose slot `i - 1` is overwritten with the
@@ -421,11 +417,9 @@ object Plated:
     /** Wrap this self-traversal as a [[Plated]] instance (the default [[Plated.childrenView]] reads
       * the carrier; a derived / [[Plated.fromChildren]] instance is cheaper).
       */
-    // CPD-OFF — the carrier field restates the self-traversal type by design.
     def asPlated: Plated[S] =
       new Plated[S]:
         val plate: Optic[S, S, S, S, MultiFocus[PSVec]] = self
-    // CPD-ON
 
     /** [[Plated.transform]] over this optic — bottom-up rewrite of every sub-term. */
     def transformAll(f: S => S)(s: S): S = Plated.transform(f)(s)(using asPlated)

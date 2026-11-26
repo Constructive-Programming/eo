@@ -1,12 +1,5 @@
-package dev.constructive.eo.avro
-
-import scala.language.implicitConversions
-
-import cats.data.Ior
-import java.util.ArrayList
-import org.apache.avro.Schema
-import org.apache.avro.generic.{GenericData, GenericRecord}
-import org.specs2.mutable.Specification
+package dev.constructive.eo
+package avro
 
 /** Behaviour spec for [[AvroPrism]]'s `.union[Branch]` macro extension. Exercises the four plan
   * scenarios per `docs/plans/2026-04-25-009-feat-eo-avro-module-plan.md` Unit 8:

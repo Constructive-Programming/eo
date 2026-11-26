@@ -1,12 +1,5 @@
-package dev.constructive.eo.avro
-
-import scala.language.implicitConversions
-
-import cats.data.{Chain, Ior}
-import java.util.ArrayList
-import org.apache.avro.Schema
-import org.apache.avro.generic.{GenericData, IndexedRecord}
-import org.specs2.mutable.Specification
+package dev.constructive.eo
+package avro
 
 /** Behaviour spec for [[AvroTraversal]] — the array-walking traversal introduced in Unit 6.
   *
@@ -32,7 +25,6 @@ class AvroTraversalSpec extends Specification:
 
   // covers: return Ior.Right(updatedRecord) when every element succeeds,
   // return Ior.Right(Vector) when every element decodes (getAll)
-  // CPD-OFF — pre-existing Basket fixture setup shared across traversal examples; touched by *Unsafe removal (#101).
   "AvroTraversal happy path: modify+getAll" >> {
     val basket = Basket(
       "Alice",
@@ -53,7 +45,6 @@ class AvroTraversalSpec extends Specification:
 
     (correctM === true).and(correctGA)
   }
-  // CPD-ON
 
   // covers: empty array — modify returns Ior.Right(record) (no elements to iterate),
   //   missing prefix — modify surfaces Ior.Left(PathMissing(items)),
@@ -188,7 +179,6 @@ class AvroTraversalSpec extends Specification:
   // covers: place overwrites every element's focused field with a constant,
   // transfer lifts C => A into element broadcaster, place on a missing prefix returns
   // Ior.Left
-  // CPD-OFF — pre-existing Basket fixture setup shared across traversal examples; touched by *Unsafe removal (#101).
   "place / transfer — happy path + missing prefix" >> {
     val basket = Basket("Alice", List(Order("x", 1.0, 1), Order("y", 2.0, 2)))
     val record = basketRecord(basket)
@@ -209,7 +199,6 @@ class AvroTraversalSpec extends Specification:
     val transferOk = transfer match
       case Ior.Right(out) => recordsEqual(out, expectedZZZ)
       case _              => false
-    // CPD-ON
     val stumpSchema =
       val fields = new ArrayList[Schema.Field]()
       fields.add(

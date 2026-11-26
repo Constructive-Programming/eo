@@ -1,8 +1,5 @@
-package dev.constructive.eo.avro
-
-import dev.constructive.eo.optics.Optic.*
-import org.apache.avro.Schema
-import org.specs2.mutable.Specification
+package dev.constructive.eo
+package avro
 
 /** Behaviour spec for the Confluent-framed seam (issue #41 redesign of #38): the decode-agnostic
   * [[ConfluentWire.resolve]] primitive and the composable [[ConfluentWire.confluent]] byte Prism.

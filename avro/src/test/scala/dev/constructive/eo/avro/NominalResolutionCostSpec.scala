@@ -1,7 +1,5 @@
-package dev.constructive.eo.avro
-
-import org.apache.avro.Schema
-import org.specs2.mutable.Specification
+package dev.constructive.eo
+package avro
 
 /** The COST gate for the nominal rung (issue #103).
   *

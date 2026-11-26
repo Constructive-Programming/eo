@@ -1,11 +1,7 @@
-package dev.constructive.eo.avro
-
-import scala.language.implicitConversions
+package dev.constructive.eo
+package avro
 
 import cats.Eq
-import cats.data.{Chain, Ior}
-import org.apache.avro.generic.GenericRecord
-import org.specs2.mutable.Specification
 
 /** Observable-identity behaviour spec for [[AvroFailure]] and the [[AvroCodec.parseInputIor]]
   * triple-input parse helper.

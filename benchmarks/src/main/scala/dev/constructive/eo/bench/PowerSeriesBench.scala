@@ -5,10 +5,8 @@ import scala.collection.immutable.ArraySeq
 import scala.compiletime.uninitialized
 
 import cats.instances.arraySeq.*
-import dev.constructive.eo.bench.fixture.{Person, Phone}
-import java.util.concurrent.TimeUnit
-import monocle.{Lens as MLens, Traversal as MTraversal}
-import org.openjdk.jmh.annotations.*
+
+import fixture.{Person, Phone}
 
 /** PowerSeries-backed Traversal over a nested focus, paired against a hand-written iterative
   * baseline and the equivalent Monocle composition.
@@ -25,12 +23,6 @@ import org.openjdk.jmh.annotations.*
   * ph.copy(isMobile = !ph.isMobile)))` — this is essentially what the chain must produce, so the
   * gap shows each library's optic-machinery overhead for multi-focus write.
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
 class PowerSeriesBench extends JmhDefaults:
 
   @Param(Array("4", "16", "64", "256", "1024", "4096"))

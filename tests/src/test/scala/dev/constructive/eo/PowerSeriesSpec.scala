@@ -1,15 +1,10 @@
 package dev.constructive.eo
 
 import scala.collection.immutable.ArraySeq
-import scala.language.implicitConversions
 
 import cats.instances.arraySeq.*
 import org.scalacheck.Prop.forAll
-import org.scalacheck.{Arbitrary, Gen}
-import org.specs2.ScalaCheck
-import org.specs2.mutable.Specification
 
-import optics.{Lens, Traversal}
 import optics.Optic.*
 import data.{MultiFocus, PSVec}
 

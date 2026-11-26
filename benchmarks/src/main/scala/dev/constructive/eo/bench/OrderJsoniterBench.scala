@@ -3,10 +3,7 @@ package bench
 
 import scala.compiletime.uninitialized
 
-import com.github.plokhotnyuk.jsoniter_scala.core.{readFromArray, writeToArray}
-import dev.constructive.eo.bench.fixture.*
-import java.util.concurrent.TimeUnit
-import org.openjdk.jmh.annotations.*
+import fixture.*
 
 /** Canonical-schema jsoniter bench (plan 009, Phase 1).
   *
@@ -32,12 +29,6 @@ import org.openjdk.jmh.annotations.*
   * `@Param size` grows the surrounding document so the byte-walk's depth-independent cost shows
   * against the codec round-trip's O(all-fields) cost.
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
 class OrderJsoniterBench extends JmhDefaults:
 
   import DomainJsoniter.{pricesSumScanCodec, pricesTraversal, streetPrism, streetScanCodec, given}

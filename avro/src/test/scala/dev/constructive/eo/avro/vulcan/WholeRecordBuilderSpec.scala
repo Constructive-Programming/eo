@@ -1,13 +1,8 @@
-package dev.constructive.eo.avro.vulcan
+package dev.constructive.eo
+package avro
+package vulcan
 
-import scala.language.implicitConversions
-
-import _root_.vulcan.Codec as VCodec
-import dev.constructive.eo.avro.{codecPrism, AvroCodec}
 import java.time.Instant
-import org.apache.avro.Schema
-import org.apache.avro.generic.GenericRecord
-import org.specs2.mutable.Specification
 
 /** The derived whole-record builder's contract (issue #95): byte-for-byte fidelity with the full
   * vulcan codec on the fields the case class holds, round-trips through the codec's decode, the

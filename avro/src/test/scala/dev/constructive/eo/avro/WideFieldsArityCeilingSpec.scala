@@ -1,9 +1,5 @@
-package dev.constructive.eo.avro
-
-import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
-import org.apache.avro.Schema
-import org.apache.avro.generic.{GenericRecord, IndexedRecord}
-import org.specs2.mutable.Specification
+package dev.constructive.eo
+package avro
 
 /** Behaviour spec for `.fields` '''above''' the 22-selector NamedTuple ceiling (issue #96).
   *
@@ -89,7 +85,6 @@ class WideFieldsArityCeilingSpec extends Specification:
       )
       .record
 
-    // CPD-OFF — 22-field Tuple22 vs 23-field TupleXXL arity-boundary fixtures; touched by *Unsafe removal (#101).
     val out = L
       .place(
         (
@@ -166,7 +161,6 @@ class WideFieldsArityCeilingSpec extends Specification:
       .and(untouched.forall(n => sameRef(wide25Schema, out, record, n)) === true)
       .and(focusClassName(decoded) === "scala.Tuple22")
       .and(read === Some(("b01", "b22")))
-    // CPD-ON
   }
 
   // ---- 23: the first newly-unlocked arity --------------------------------
@@ -211,7 +205,6 @@ class WideFieldsArityCeilingSpec extends Specification:
       )
       .record
 
-    // CPD-OFF — 23-field TupleXXL arity-boundary fixture; touched by *Unsafe removal (#101).
     val out = L
       .place(
         (
@@ -289,7 +282,6 @@ class WideFieldsArityCeilingSpec extends Specification:
       .and(untouched.forall(n => sameRef(wide25Schema, out, record, n)) === true)
       .and(focusClassName(decoded) === "scala.runtime.TupleXXL")
       .and(read === Some(("b01", "b23")))
-    // CPD-ON
   }
 
   // ---- 40, mixed primitives: the boxing path under load ------------------
@@ -437,7 +429,6 @@ class WideFieldsArityCeilingSpec extends Specification:
       "f39" -> "39.25",
       "f40" -> "false",
     )
-    // CPD-OFF — 40-field Mixed42 arity-boundary fixture; touched by *Unsafe removal (#101).
     val untouched = Seq("f41", "f42")
 
     val decoded = L.getOption(out)
@@ -445,7 +436,6 @@ class WideFieldsArityCeilingSpec extends Specification:
       case Some(nt) => Some((nt.f01, nt.f02, nt.f03, nt.f04, nt.f05, nt.f39))
       case None     => None
 
-    // CPD-ON
     (mismatches(mixed42Schema, out, written) === Nil)
       .and(
         mismatches(

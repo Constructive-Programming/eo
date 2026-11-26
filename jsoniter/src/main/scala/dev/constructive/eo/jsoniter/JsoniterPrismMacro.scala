@@ -22,6 +22,43 @@ import dev.constructive.eo.generics.MacroSelectors
   */
 object JsoniterPrismMacro:
 
+  // ---- `JsoniterPrism.path` / `JsoniterTraversal.path` ----------------
+  //
+  // The path is a literal, so it is parsed here, at compile time, by the companion's own `steps`:
+  // a malformed one is a compile error carrying the message `fromPath` would return as a `Left`,
+  // and the parsed steps are emitted as a literal list, so nothing is parsed (or thrown) at
+  // runtime.
+
+  private given ToExpr[PathStep] with
+
+    def apply(step: PathStep)(using Quotes): Expr[PathStep] = step match
+      case PathStep.Field(name) => '{ PathStep.Field(${ Expr(name) }) }
+      case PathStep.Index(i)    => '{ PathStep.Index(${ Expr(i) }) }
+      case PathStep.Wildcard    => '{ PathStep.Wildcard }
+
+  def path[A: Type, O[_]: Type](
+      companion: Expr[JsoniterPathConstructors[O]],
+      pathE: Expr[String],
+      codec: Expr[JsonValueCodec[A]],
+  )(using q: Quotes): Expr[O[A]] =
+    import q.reflect.*
+    // The companion is only an expression here; its `steps` runs now, so pick the object itself.
+    val (who, parse) =
+      if TypeRepr.of[O].typeSymbol == TypeRepr.of[JsoniterPrism].typeSymbol then
+        ("JsoniterPrism.path", JsoniterPrism.steps)
+      else ("JsoniterTraversal.path", JsoniterTraversal.steps)
+    val steps = pathE.value match
+      case Some(path) => parse(path).fold(report.errorAndAbort(_, pathE), identity)
+      case None       =>
+        report.errorAndAbort(
+          s"$who takes a literal path. For a path known only at runtime, use fromPath, which " +
+            "returns a malformed path as a Left.",
+          pathE,
+        )
+    '{ $companion.fromSteps[A](${ Expr(steps) })(using $codec) }
+
+  // ---- cursor selectors ------------------------------------------------
+
   /** Child `P[B]` from `parent` via a `(_.field)` selector. */
   def fieldImpl[A: Type, B: Type, P[_]: Type](
       parent: Expr[JsoniterPath[A, P]],
@@ -119,7 +156,7 @@ object JsoniterPrismMacro:
     Expr.summon[JsonValueCodec[B]].getOrElse {
       report.errorAndAbort(
         s"$context: no given JsonValueCodec[${Type.show[B]}] in scope."
-          + " Derive one via `given JsonValueCodec[" + Type.show[B] + "] = JsonCodecMaker.make`"
+          + " Derive one via `given JsoniterCodec[" + Type.show[B] + "] = JsoniterCodec.derived`"
           + " (jsoniter-scala-macros), or provide one manually."
       )
     }

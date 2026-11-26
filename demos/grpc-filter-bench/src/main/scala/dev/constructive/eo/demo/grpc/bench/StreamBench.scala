@@ -6,23 +6,19 @@ import scala.compiletime.uninitialized
 import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, Ref}
 import com.github.plokhotnyuk.jsoniter_scala.core.writeToArray
+import dev.constructive.eo.bench.JmhDefaults
 import dev.constructive.eo.jsoniter.JsonSlice
 import fs2.{Chunk, Stream}
-import java.util.concurrent.TimeUnit
 import org.openjdk.jmh.annotations.*
 
 /** The whole filter, per message, in memory: gRPC frames arriving in 256 KiB pieces (as the demo
   * reads its socket) are cut into messages, judged, tallied, and the kept ones framed again. No
   * sockets, so what differs between the two `judge`s is what each costs in a running pipeline.
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
 @Warmup(iterations = 3, time = 2)
 @Measurement(iterations = 5, time = 2)
 @OperationsPerInvocation(StreamBench.Messages)
-class StreamBench:
+class StreamBench extends JmhDefaults:
 
   @Param(Array("optics", "decode"))
   var judge: String = uninitialized

@@ -3,26 +3,9 @@ package dev.constructive.eo
 import cats.Foldable
 import cats.data.{Chain, Const, ZipList}
 import cats.instances.list.given
-import dev.constructive.eo.accessor.*
-import dev.constructive.eo.compose.*
-import dev.constructive.eo.forgetful.*
 import org.scalacheck.Prop.forAll
-import org.scalacheck.{Arbitrary, Cogen, Gen}
-import org.specs2.mutable.Specification
 
-import optics.{
-  AffineFold,
-  Fold,
-  ForgetFold,
-  Getter,
-  Lens,
-  Optic,
-  Optional,
-  PickFold,
-  Prism,
-  Traversal,
-  Unfold
-}
+import optics.{AffineFold, Fold, ForgetFold, PickFold, Unfold}
 import data.{Affine, Direct, Forget, ModifyF, MultiFocus, PSVec}
 import laws.{AffineFoldLaws, FoldLaws, GetterLaws, OptionalLaws, UnfoldLaws}
 import laws.discipline.{AffineFoldTests, FoldTests, GetterTests, OptionalTests, UnfoldTests}

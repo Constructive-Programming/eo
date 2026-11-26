@@ -3,6 +3,7 @@ package bench
 
 import scala.compiletime.uninitialized
 
+import dev.constructive.eo.bench.JmhDefaults
 import dev.constructive.eo.demo.uplc.runtime.{Dispatch, Rt}
 import dev.constructive.eo.demo.uplc.validators.{Scenario, Scenarios}
 import java.util.concurrent.TimeUnit
@@ -24,10 +25,13 @@ def classFile(script: CborScript): JvmClassScript =
   *   - `jvm` — the generated class, translated and loaded once in setup: evaluate the script, apply
   *     it to the context.
   */
-abstract class ScriptState:
+@OutputTimeUnit(TimeUnit.MICROSECONDS)
+@Fork(value = 3, jvmArgsAppend = Array("-Xss256m"))
+abstract class ScriptState extends JmhDefaults:
 
   protected def scenario: Scenario
 
+  var cbor: CborScript = uninitialized
   var applied: DeBruijnedProgram = uninitialized
   var compiled: Dispatch = uninitialized
   var context: Constant = uninitialized
@@ -35,8 +39,9 @@ abstract class ScriptState:
   @Setup(Level.Trial)
   def prepare(): Unit =
     val s = scenario
+    cbor = script(s.script.program)
     applied = (s.script.program $ s.context).deBruijnedProgram
-    val classFile = bench.classFile(script(s.script.program))
+    val classFile = bench.classFile(cbor)
     compiled = Exec.load(classFile)
     context = Constant.Data(s.context)
     // Both evaluators must accept the transaction, or the timings compare different work.
@@ -48,13 +53,10 @@ abstract class ScriptState:
 
   @Benchmark def jvm: AnyRef = Rt.apply(compiled.run(), context)
 
-/** Each validator validating one accepting transaction. */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.MICROSECONDS)
-@Fork(value = 3, jvmArgsAppend = Array("-Xss256m"))
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
+/** Each validator validating one accepting transaction (`cek`, `jvm`), and what its translation
+  * costs: flat bytes to class file (`translate`), and to a loaded, initialised class
+  * (`translateAndLoad`).
+  */
 class ValidatorBench extends ScriptState:
 
   @Param(Array("helloOwner", "preimage", "timeLock", "multisig", "fibonacci", "htlc"))
@@ -62,42 +64,19 @@ class ValidatorBench extends ScriptState:
 
   protected def scenario: Scenario = Scenarios.accepting.find(_.name == validator).get
 
+  @Benchmark def translate: Option[JvmClassScript] = UplcJvm.toBytecode.getOption(cbor)
+
+  @Benchmark def translateAndLoad: Option[Dispatch] =
+    UplcJvm.toBytecode.getOption(cbor).map(Exec.load)
+
 /** The Fibonacci puzzle at growing `n`: how each evaluator scales with interpretive work. Slow
   * operations reach steady state late — with 3 × 1 s of warm-up the first measured iteration of
   * every fork was still being compiled — hence the longer warm-up.
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.MICROSECONDS)
-@Fork(value = 3, jvmArgsAppend = Array("-Xss256m"))
 @Warmup(iterations = 5, time = 2)
-@Measurement(iterations = 5, time = 1)
 class FibonacciBench extends ScriptState:
 
   @Param(Array("10", "100", "1000"))
   var n: Int = uninitialized
 
   protected def scenario: Scenario = Scenarios.fibonacciAt(n)
-
-/** What the translation costs: flat bytes to class file, and to a loaded, initialised class. */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.MICROSECONDS)
-@Fork(value = 3, jvmArgsAppend = Array("-Xss256m"))
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
-class TranslateBench:
-
-  @Param(Array("helloOwner", "preimage", "timeLock", "multisig", "fibonacci", "htlc"))
-  var validator: String = uninitialized
-
-  var script: CborScript = uninitialized
-
-  @Setup(Level.Trial)
-  def prepare(): Unit =
-    script = bench.script(Scenarios.accepting.find(_.name == validator).get.script.program)
-
-  @Benchmark def translate: Option[JvmClassScript] = UplcJvm.toBytecode.getOption(script)
-
-  @Benchmark def translateAndLoad: Option[Dispatch] =
-    UplcJvm.toBytecode.getOption(script).map(Exec.load)

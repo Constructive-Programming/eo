@@ -1,6 +1,5 @@
 package dev.constructive.eo
 
-// CPD-OFF — shared test imports and the hoisted fixture ADTs repeat across plated specs.
 import scala.annotation.tailrec
 import scala.collection.immutable.ArraySeq
 
@@ -9,26 +8,14 @@ import cats.data.{Chain, State}
 import dev.constructive.eo.generics.{lens, plate, prism}
 import dev.constructive.eo.optics.Optic.* // .andThen / .modify
 import dev.constructive.eo.optics.Plated.* // .transformAll / .universeOf extensions
-import dev.constructive.eo.optics.{Children, Lens, Plated, Prism}
-import org.scalacheck.{Arbitrary, Gen}
-import org.specs2.mutable.Specification
-import org.typelevel.discipline.specs2.mutable.Discipline
+import dev.constructive.eo.optics.{Children, Plated}
 
+import samples.{Bin, Expr}
 import laws.PlatedLaws
 import laws.discipline.PlatedTests
 
 // Top-level fixtures: the `plate[S]` macro emits `new V(...)`, which loses its
 // outer-accessor wiring if the ADT is nested in the spec class. Hoisted here.
-enum Expr:
-  case Var(name: String)
-  case App(f: Expr, x: Expr)
-  case Lam(bind: String, body: Expr)
-
-enum Bin:
-  case Leaf(value: Int)
-  case Node(left: Bin, right: Bin)
-// CPD-ON
-
 // Container-bearing recursive ADT: Option + List + Vector + ArraySeq + Seq + Chain (via Traverse[Chain]).
 // `seqChildren` is generated as a List: plate must rebuild a Seq field in its own collection type.
 final case class RoseNode(
@@ -268,30 +255,25 @@ class PlatedSpec extends Specification with Discipline:
       identity,
     )
     val nameL = Lens[Expr.Var, String](_.name, (v, n) => v.copy(name = n))
-    val tree = Expr.App(Expr.Var("f"), Expr.Lam("y", Expr.Var("y")))
+    // `f (λy. y)` with the free name `f` and the bound occurrence of `y` as given; the Lam binder
+    // "y" is a String, not a Var node, so no rewrite below touches it.
+    def term(f: String, y: String): Expr = Expr.App(Expr.Var(f), Expr.Lam("y", Expr.Var(y)))
+    val tree = term("f", "y")
+    val everyVarShouted = term("F", "Y")
 
-    // CPD-OFF — the same three-term rewrite is asserted for transform, plate and everywhere.
-    // f -> F, the bound occurrence y -> Y, but the Lam binder "y" stays lowercase.
     val shout: Expr => Expr = {
       case Expr.Var(n) => Expr.Var(n.toUpperCase)
       case other       => other
     }
-    val transformOk = Plated.transform(shout)(tree) ==
-      Expr.App(Expr.Var("F"), Expr.Lam("y", Expr.Var("Y")))
-
-    // plate (immediate children) → Prism (those that are Var) → Lens (their name):
-    // only Var("f") is hit; the Lam and the nested Var("y") under it stay untouched.
+    // plate (immediate children) → Prism (those that are Var) → Lens (their name): only Var("f")
+    // is hit; the Lam and the nested Var("y") under it stay untouched.
     val immediateVarNames = Plated[Expr].plate.andThen(varP).andThen(nameL)
-    val oneLevelOk = immediateVarNames.modify(_.toUpperCase)(tree) ==
-      Expr.App(Expr.Var("F"), Expr.Lam("y", Expr.Var("y")))
-
-    // everywhere: EVERY variable at every depth (Lam binder is a String, not a Var node).
+    // everywhere: EVERY variable at every depth.
     val allVarNames = Plated.everywhere[Expr].andThen(varP).andThen(nameL)
-    val allDepthsOk = allVarNames.modify(_.toUpperCase)(tree) ==
-      Expr.App(Expr.Var("F"), Expr.Lam("y", Expr.Var("Y")))
 
-    transformOk && oneLevelOk && allDepthsOk
-    // CPD-ON
+    (Plated.transform(shout)(tree) === everyVarShouted)
+      .and(immediateVarNames.modify(_.toUpperCase)(tree) === term("F", "y"))
+      .and(allVarNames.modify(_.toUpperCase)(tree) === everyVarShouted)
   }
 
   // ----- Behaviour: rewrite re-fires to a fixpoint (bottom-up constant fold) -----

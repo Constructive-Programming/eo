@@ -1,11 +1,8 @@
 package dev.constructive.eo
 package bench
 
-import java.util.concurrent.TimeUnit
-
-import org.openjdk.jmh.annotations.*
-
 import _root_.zio.ZEnvironment
+
 import bench.fixture.{DiDb, DiMetrics}
 import optics.Lens
 import zio.service
@@ -18,12 +15,6 @@ import zio.service
   * one-line wrappers whose per-op cost is the same `modify`/`get` hop measured here, and an
   * `Unsafe.run` per invocation would drown that hop in ZIO runtime noise.
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
 class ZioDiBench extends JmhDefaults:
 
   private val db = DiDb("jdbc:h2", 4)

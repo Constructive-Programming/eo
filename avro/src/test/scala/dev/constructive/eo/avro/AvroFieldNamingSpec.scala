@@ -1,13 +1,5 @@
-package dev.constructive.eo.avro
-
-import scala.language.implicitConversions
-
-import hearth.kindlings.avroderivation.{AvroConfig, AvroDecoder, AvroEncoder, AvroSchemaFor}
-import java.io.ByteArrayOutputStream
-import org.apache.avro.Schema
-import org.apache.avro.generic.{GenericDatumWriter, GenericRecord}
-import org.apache.avro.io.EncoderFactory
-import org.specs2.mutable.Specification
+package dev.constructive.eo
+package avro
 
 /** Regression spec for issue #35 — field navigation must honour the SCHEMA field name, not the raw
   * Scala field name. Every fixture here derives its codec under a snake_case name transform, so the
@@ -41,13 +33,6 @@ object AvroFieldNamingSpec:
     given AvroDecoder[Event] = AvroDecoder.derived
     given AvroSchemaFor[Event] = AvroSchemaFor.derived
 
-  private def toBinary(record: GenericRecord, schema: Schema): Array[Byte] =
-    val out = new ByteArrayOutputStream()
-    val encoder = EncoderFactory.get().binaryEncoder(out, null)
-    new GenericDatumWriter[GenericRecord](schema).write(record, encoder)
-    encoder.flush()
-    out.toByteArray
-
 end AvroFieldNamingSpec
 
 /** NT codec for the grouped bytes-face read, derived OUTSIDE the snake_case scope so the DEFAULT
@@ -73,7 +58,10 @@ class AvroFieldNamingSpec extends Specification:
   private val click = Click("abc", 7)
 
   private val clickBytes =
-    toBinary(clickCodec.encode(click).asInstanceOf[GenericRecord], clickCodec.schema)
+    AvroSpecFixtures.toBinary(
+      clickCodec.encode(click).asInstanceOf[GenericRecord],
+      clickCodec.schema
+    )
 
   // The four byte-face examples (fixture guard, `.field` read, `.field` modify, `selectDynamic`)
   // were one code path with one fixture, so they are one example. The leading clause is the
@@ -92,7 +80,8 @@ class AvroFieldNamingSpec extends Specification:
     val bumped = codecPrism[Click].field(_.landingPageId).record.modify(_ + 1)(rec).getOrElse(rec)
     val evCodec = summon[AvroCodec[Event]]
     val ev = Event("e1", Meta(42, "hot"))
-    val bytes = toBinary(evCodec.encode(ev).asInstanceOf[GenericRecord], evCodec.schema)
+    val bytes =
+      AvroSpecFixtures.toBinary(evCodec.encode(ev).asInstanceOf[GenericRecord], evCodec.schema)
     val nested = codecPrism[Event].field(_.meta).field(_.performanceSourceId)
     (codecPrism[Click].field(_.landingPageId).record.getOption(rec) must beSome(7))
       .and(clickCodec.decodeEither(bumped) must beRight(Click("abc", 8)))

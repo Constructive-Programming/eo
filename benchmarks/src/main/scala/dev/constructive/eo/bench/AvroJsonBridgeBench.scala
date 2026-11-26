@@ -3,15 +3,12 @@ package bench
 
 import scala.compiletime.uninitialized
 
-import com.github.plokhotnyuk.jsoniter_scala.core.{readFromArray, writeToArray, JsonValueCodec}
-import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
-import dev.constructive.eo.bench.fixture.*
-import dev.constructive.eo.bench.fixture.ConversionDomain.*
-import dev.constructive.eo.jsoniter.JsoniterPrism
-import dev.constructive.eo.optics.Optic.*
 import java.util.Arrays
-import java.util.concurrent.TimeUnit
-import org.openjdk.jmh.annotations.*
+
+import fixture.*
+import fixture.ConversionDomain.*
+import jsoniter.{JsoniterCodec, JsoniterPrism}
+import optics.Optic.*
 
 /** Cross-format bridge bench, BOTH directions between `Array[Byte]` (Avro binary) and `Array[Byte]`
   * (JSON) — the AvroPrism × JsoniterPrism pipeline the `AvroJsonBridgeSpec` proves correct. Each
@@ -50,12 +47,6 @@ import org.openjdk.jmh.annotations.*
   *   sbt "benchmarks/Jmh/run -i 5 -wi 3 -f 3 -t 1 -prof gc .*AvroJsonBridgeBench.*"
   * }}}
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
 class AvroJsonBridgeBench extends JmhDefaults:
 
   import AvroJsonBridgeBench.given
@@ -159,7 +150,7 @@ class AvroJsonBridgeBench extends JmhDefaults:
 
 end AvroJsonBridgeBench
 
-/** The naive rows' output shapes — their `JsonValueCodec`s exist ONLY for those rows; the eo rows
+/** The naive rows' output shapes — their `JsoniterCodec`s exist ONLY for those rows; the eo rows
   * splice into static templates and never construct one.
   */
 final case class ClickMessage(schema: String, click: ClickPayload, partner: String)
@@ -169,27 +160,19 @@ object AvroJsonBridgeBench:
 
   import dev.constructive.eo.avro.codecPrism
 
-  given JsonValueCodec[ClickMessage] = JsonCodecMaker.make
-  given JsonValueCodec[WideSummaryMessage] = JsonCodecMaker.make
-  given JsonValueCodec[ClickPayload] = JsonCodecMaker.make
-  given JsonValueCodec[String] = JsonCodecMaker.make
-
-  /** Literal-path prism for the HARNESS: a `Left` on a literal path in this file is a broken
-    * benchmark definition, so fail fast (library callers handle the `Either` instead).
-    */
-  private def jsonPrism[A](path: String)(using JsonValueCodec[A]): JsoniterPrism[A] =
-    JsoniterPrism
-      .fromPath[A](path)
-      .fold(msg => throw new IllegalArgumentException(s"bench path '$path': $msg"), identity)
+  given JsoniterCodec[ClickMessage] = JsoniterCodec.derived
+  given JsoniterCodec[WideSummaryMessage] = JsoniterCodec.derived
+  given JsoniterCodec[ClickPayload] = JsoniterCodec.derived
+  given JsoniterCodec[String] = JsoniterCodec.derived
 
   /** Avro-side scalar branch not already in [[ConversionDomain]]. */
   val conversionIdPrism = codecPrism[WideConversion].field(_.conversionId)
 
   /** JSON-side byte optics — branch codecs only. */
-  val clickJson = jsonPrism[ClickPayload]("$.click")
-  val partnerJson = jsonPrism[String]("$.partner")
-  val conversionIdJson = jsonPrism[String]("$.conversionId")
-  val countryJson = jsonPrism[String]("$.country")
+  val clickJson = JsoniterPrism.path[ClickPayload]("$.click")
+  val partnerJson = JsoniterPrism.path[String]("$.partner")
+  val conversionIdJson = JsoniterPrism.path[String]("$.conversionId")
+  val countryJson = JsoniterPrism.path[String]("$.country")
 
   /** Static output templates. Placeholders are VALID encodings of their branch types (the Affine
     * write decodes the current focus before splicing), built once from the naive codecs so the

@@ -1,18 +1,11 @@
 package dev.constructive.eo
 package bench
 
-import java.util.concurrent.TimeUnit
-
 import cats.syntax.all.*
-
-import org.openjdk.jmh.annotations.*
-
-import _root_.vulcan.Codec as VCodec
-
-import avro.AvroCodec
-import avro.codecPrism
-import avro.vulcan.{AvroVulcan, WholeRecordBuilder}
 import org.apache.avro.generic.GenericData
+
+import avro.{codecPrism, AvroCodec}
+import avro.vulcan.{AvroVulcan, WholeRecordBuilder}
 
 /** Whole-record encode shoot-out on the issue-#95 filer's production shape: a ~66-leaf ClickInfo
   * whose leaves live in 5 nested sub-records (Geo 8, UserAgentInfo 9, PostClick 11, Ivt 20,
@@ -482,12 +475,6 @@ object ClickRecordImpls:
   val derivedCodec: AvroCodec[ClickInfo] = derived.asAvroCodec
   val derivedRoot = codecPrism[ClickInfo](using derivedCodec)
 
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
 class ClickRecordBench extends JmhDefaults:
 
   import ClickRecordImpls.*

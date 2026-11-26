@@ -1,14 +1,8 @@
 package dev.constructive.eo
 
 import cats.instances.list.given
-import dev.constructive.eo.accessor.*
-import dev.constructive.eo.compose.*
-import dev.constructive.eo.forgetful.*
-import org.scalacheck.Arbitrary
 import org.scalacheck.Prop.forAll
-import org.specs2.mutable.Specification
 
-import optics.{Getter, Iso, Lens, Optic, Optional, Prism, Traversal}
 import optics.Optic.*
 import data.{Affine, Direct, ModifyF, MultiFocus, PSVec}
 import laws.eo.{

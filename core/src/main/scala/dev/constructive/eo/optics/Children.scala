@@ -78,10 +78,6 @@ object Children:
     else if isEmptyOf(right) then left
     else new ChildrenRepr.Concat(left, right)
 
-  // CPD-OFF — the flatten factories differ only in the source collection's iterator.
-  def flattenList[A, S](xs: List[A])(f: A => Children[S]): Children[S] =
-    new ChildrenRepr.Flatten(() => xs.iterator.map(f))
-
   def flattenSeq[A, S](xs: scala.collection.Seq[A])(f: A => Children[S]): Children[S] =
     new ChildrenRepr.Flatten(() => xs.iterator.map(f))
 
@@ -96,7 +92,6 @@ object Children:
       F.foldLeft(fa, ())((_, a) => { buf += f(a); () })
       buf.iterator
     })
-  // CPD-ON
 
   // ---- public read surface -------------------------------------------------------------------
 

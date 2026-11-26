@@ -1,13 +1,10 @@
 package dev.constructive.eo
 package bench
 
-import java.util.concurrent.TimeUnit
-
 import scala.annotation.tailrec
 
 import io.scalaland.chimney.dsl.*
 import io.scalaland.chimney.{partial, PartialTransformer, Patcher, Transformer}
-import org.openjdk.jmh.annotations.*
 
 import bench.fixture.*
 import chimney.*
@@ -31,12 +28,6 @@ import optics.Traversal
   * elements invalid; a DTO whose balance doesn't decode), so the cost of collecting chimney's
   * errors — or of passing a miss through — shows next to the success path.
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
 class ChimneyBench extends JmhDefaults:
 
   private val raws: List[ChRawPrice] = List.tabulate(64)(i => ChRawPrice(i.toLong * 100))

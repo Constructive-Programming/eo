@@ -5,10 +5,9 @@ import scala.collection.immutable.ArraySeq
 import scala.compiletime.uninitialized
 
 import cats.instances.arraySeq.given
-import dev.constructive.eo.bench.fixture.Result
-import java.util.concurrent.TimeUnit
-import monocle.{Prism as MPrism, Traversal as MTraversal}
-import org.openjdk.jmh.annotations.*
+import monocle.Prism as MPrism
+
+import fixture.Result
 
 /** Sparse-Prism PowerSeries bench — half-hit, half-miss per element through a Prism sitting after a
   * Traversal.
@@ -25,12 +24,6 @@ import org.openjdk.jmh.annotations.*
   * `Functor[ArraySeq].map` is a native array walk, so the numbers here reflect the PowerSeries /
   * Prism machinery rather than any container traversal artefact.
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
 class PowerSeriesPrismBench extends JmhDefaults:
 
   @Param(Array("8", "32", "128", "512", "2048"))

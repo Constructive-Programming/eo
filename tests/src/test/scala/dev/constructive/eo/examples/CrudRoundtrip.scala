@@ -11,7 +11,6 @@ import hearth.kindlings.circederivation.KindlingsCodecAsObject
 import io.circe.parser.decode as parseJson
 import io.circe.{Codec, Json}
 
-import optics.{Lens, Optic, Traversal}
 import optics.Optic.*
 import generics.lens
 

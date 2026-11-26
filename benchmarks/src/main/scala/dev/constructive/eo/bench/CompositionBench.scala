@@ -1,9 +1,7 @@
 package dev.constructive.eo
 package bench
 
-import dev.constructive.eo.bench.fixture.*
-import java.util.concurrent.TimeUnit
-import org.openjdk.jmh.annotations.*
+import fixture.*
 
 /** Cross-carrier `.andThen` composition cost — EO's signature feature (plan 009, Phase 2).
   *
@@ -20,12 +18,6 @@ import org.openjdk.jmh.annotations.*
   *     `Affine` carrier by an automatic `Morph[Tuple2, Affine]`, no explicit `.morph` at the call
   *     site. This is the composition EO does that a fixed-carrier optic library can't.
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
 class CompositionBench extends JmhDefaults:
 
   import NestedOptics.{d3, d6, eoFlag, eoN1, eoN2, eoN3, eoN4, eoN5, eoN6, leaf}

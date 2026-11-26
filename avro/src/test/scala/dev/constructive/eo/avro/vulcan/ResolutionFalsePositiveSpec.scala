@@ -1,16 +1,11 @@
-package dev.constructive.eo.avro.vulcan
+package dev.constructive.eo
+package avro
+package vulcan
 
 import scala.jdk.CollectionConverters.*
-import scala.language.implicitConversions
 import scala.util.control.NonFatal
 
-import _root_.vulcan.Codec as VCodec
 import cats.syntax.all.*
-import dev.constructive.eo.avro.{codecPrism, AvroCodec}
-import hearth.kindlings.avroderivation.{AvroConfig, AvroDecoder, AvroEncoder, AvroSchemaFor}
-import org.apache.avro.Schema
-import org.apache.avro.generic.GenericRecord
-import org.specs2.mutable.Specification
 
 // ==============================================================================================
 // LEGITIMATE, CURRENTLY-WORKING user code. Every fixture in this file is code a real user can

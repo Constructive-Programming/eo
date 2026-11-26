@@ -1,11 +1,9 @@
-package dev.constructive.eo.jsoniter
+package dev.constructive.eo
+package jsoniter
 
-import scala.language.implicitConversions
-
-import com.github.plokhotnyuk.jsoniter_scala.core.{writeToArray, JsonValueCodec}
-import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
 import dev.constructive.eo.optics.Optic.*
-import org.specs2.mutable.Specification
+
+import SpecCodecs.given
 
 // Fixture ADTs at top level (mirrors the eo-generics convention for macro-facing test types).
 final case class CursorZip(code: Int, ext: String)
@@ -21,19 +19,15 @@ final case class CursorBasket(items: List[CursorItem], total: Double)
   * consume-via-capability seam: a `JsoniterPrism` given serves the derived `CanGetOption` /
   * `CanModify` evidence.
   */
-import JsoniterPathFixtures.{prism, traversal}
 
 class JsoniterCursorSpec extends Specification:
 
-  given JsonValueCodec[String] = JsonCodecMaker.make
-  given JsonValueCodec[Int] = JsonCodecMaker.make
-  given JsonValueCodec[Double] = JsonCodecMaker.make
-  given JsonValueCodec[CursorZip] = JsonCodecMaker.make
-  given JsonValueCodec[CursorAddress] = JsonCodecMaker.make
-  given JsonValueCodec[CursorPerson] = JsonCodecMaker.make
-  given JsonValueCodec[CursorItem] = JsonCodecMaker.make
-  given JsonValueCodec[List[CursorItem]] = JsonCodecMaker.make
-  given JsonValueCodec[CursorBasket] = JsonCodecMaker.make
+  given JsoniterCodec[CursorZip] = JsoniterCodec.derived
+  given JsoniterCodec[CursorAddress] = JsoniterCodec.derived
+  given JsoniterCodec[CursorPerson] = JsoniterCodec.derived
+  given JsoniterCodec[CursorItem] = JsoniterCodec.derived
+  given JsoniterCodec[List[CursorItem]] = JsoniterCodec.derived
+  given JsoniterCodec[CursorBasket] = JsoniterCodec.derived
 
   private def str(b: Array[Byte]): String = new String(b, "UTF-8")
 
@@ -69,7 +63,7 @@ class JsoniterCursorSpec extends Specification:
 
   "field drilling ≡ string-path prism, on read and write" >> {
     val typed = JsoniterPrism[CursorPerson].field(_.address).field(_.street)
-    val pathed = prism[String]("$.address.street")
+    val pathed = JsoniterPrism.path[String]("$.address.street")
     (typed.headOption(personBytes) === Some("main st"))
       .and(typed.headOption(personBytes) === pathed.headOption(personBytes))
       .and(str(typed.replace("elm st")(personBytes)) === str(pathed.replace("elm st")(personBytes)))
@@ -103,7 +97,7 @@ class JsoniterCursorSpec extends Specification:
     (secondP.headOption(basketBytes) === Some(CursorItem("b", 2.5)))
       .and(
         secondP.headOption(basketBytes) ===
-          prism[CursorItem]("$.items[1]").headOption(basketBytes)
+          JsoniterPrism.path[CursorItem]("$.items[1]").headOption(basketBytes)
       )
   }
 
@@ -116,7 +110,7 @@ class JsoniterCursorSpec extends Specification:
       .and(pricesT.foldMap(_ => 1)(basketBytes) === 3)
       .and(
         str(pricesT.modify(_ * 2)(basketBytes)) ===
-          str(traversal[Double]("$.items[*].price").modify(_ * 2)(basketBytes))
+          str(JsoniterTraversal.path[Double]("$.items[*].price").modify(_ * 2)(basketBytes))
       )
   }
 

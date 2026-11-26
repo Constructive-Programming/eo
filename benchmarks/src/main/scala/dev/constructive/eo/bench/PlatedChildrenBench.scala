@@ -1,12 +1,8 @@
-// CPD-OFF — JMH harness header (imports / annotations / defaults) repeats across benchmarks.
 package dev.constructive.eo
 package bench
 
-import java.util.concurrent.TimeUnit
-
-import dev.constructive.eo.generics.plate
-import dev.constructive.eo.optics.Plated as EoPlated
-import org.openjdk.jmh.annotations.*
+import generics.plate
+import optics.Plated as EoPlated
 
 /** The `Plated.children` / `mapChildren` shapes from issues #169 / #172: a product whose only child
   * position is a `List[S]` field, and one `S` plus a `List[S]` field. `eo*` is the derived plate;
@@ -20,14 +16,7 @@ enum ChildrenExpr:
 object ChildrenExpr:
   given EoPlated[ChildrenExpr] = plate[ChildrenExpr]
 
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
 class PlatedChildrenBench extends JmhDefaults:
-  // CPD-ON
 
   private val two = List[ChildrenExpr](ChildrenExpr.Leaf(1), ChildrenExpr.Leaf(2))
   private val many: ChildrenExpr = ChildrenExpr.Many(two)

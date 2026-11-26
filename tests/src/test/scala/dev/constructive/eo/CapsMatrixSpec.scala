@@ -26,12 +26,10 @@ package dev.constructive.eo
 import scala.compiletime.testing.typeChecks
 
 import cats.{Applicative, Functor, Id, Invariant}
-import org.specs2.mutable.Specification
 
 import optics.*
 import optics.SimpleLens.transformEvidence
 import data.{Affine, Direct, Forget, ModifyF, MultiFocus, PSVec}
-import forgetful.ForgetfulTraverse
 
 /** A Functor that is NOT Applicative — what a Lens's `modifyF` must still accept. */
 final case class Box[A](a: A)

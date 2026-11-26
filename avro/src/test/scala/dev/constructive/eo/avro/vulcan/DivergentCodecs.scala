@@ -1,13 +1,10 @@
-package dev.constructive.eo.avro.vulcan
+package dev.constructive.eo
+package avro
+package vulcan
 
 import scala.jdk.CollectionConverters.*
 
-import _root_.vulcan.Codec as VCodec
 import cats.syntax.all.*
-import dev.constructive.eo.avro.AvroCodec
-import hearth.kindlings.avroderivation.{AvroConfig, AvroDecoder, AvroEncoder, AvroSchemaFor}
-import org.apache.avro.Schema
-import org.apache.avro.generic.GenericRecord
 
 /** Hand-written vulcan codecs whose Avro schema is NOT positionally 1:1 with the case class — the
   * population the position-resolution design (issue #35) silently mis-targets.

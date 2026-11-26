@@ -3,11 +3,8 @@ package bench
 
 import scala.compiletime.uninitialized
 
-import dev.constructive.eo.avro.{AvroCodec, ConfluentWire}
-import dev.constructive.eo.bench.fixture.*
-import java.util.concurrent.TimeUnit
-import org.apache.avro.generic.IndexedRecord
-import org.openjdk.jmh.annotations.*
+import avro.{AvroCodec, ConfluentWire}
+import fixture.*
 
 /** Decode-path reuse bench (#77): the per-thread `GenericDatumReader` + `BinaryDecoder` reuse vs
   * the pre-#77 fresh-allocation decode, on the 7-field [[ConversionDomain]] envelope.
@@ -26,12 +23,6 @@ import org.openjdk.jmh.annotations.*
   *   sbt "benchmarks/Jmh/run -f 1 -wi 2 -i 3 -t 1 -prof gc .*AvroDecodeReuseBench.*"
   * }}}
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
 class AvroDecodeReuseBench extends JmhDefaults:
 
   import ConversionDomain.*

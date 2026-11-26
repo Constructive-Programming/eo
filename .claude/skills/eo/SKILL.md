@@ -108,22 +108,20 @@ multi-field NamedTuple, `.each` for arrays. Default surface returns
 ### A5. JSON byte-buffer edit (no AST)
 
 ```scala
-import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
-import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
 import dev.constructive.eo.data.Affine.given
-import dev.constructive.eo.jsoniter.JsoniterPrism
+import dev.constructive.eo.jsoniter.{JsoniterCodec, JsoniterPrism}
 
-given JsonValueCodec[Long] = JsonCodecMaker.make
-// fromPath returns Either — a path is DATA, and there is no throwing twin.
-val idP = JsoniterPrism.fromPath[Long]("$.payload.user.id")
-  .fold(msg => sys.error(msg), identity)   // unwrap once; literal path here
+given JsoniterCodec[Long] = JsoniterCodec.derived
+// A literal path is checked at compile time; a runtime path goes through
+// fromPath, which returns Either — a path is DATA, and there is no throwing twin.
+val idP = JsoniterPrism.path[Long]("$.payload.user.id")
 
 idP.foldMap(identity[Long])(bytes)   // ~50 ns/op (16× eo-circe)
 idP.replace(99L)(bytes)              // ~100 ns/op (14× eo-circe)
 ```
 
-Wildcards `[*]` route through `JsoniterTraversal.fromPath[A]` (same
-`Either`). Path subset is `$`, `$.foo`, `$[i]`, `$[*]`, dotted chains;
+Wildcards `[*]` route through `JsoniterTraversal.path[A]` /
+`JsoniterTraversal.fromPath[A]` (same split). Path subset is `$`, `$.foo`, `$[i]`, `$[*]`, dotted chains;
 no filters / recursive descent.
 
 ### A6. Avro record edit

@@ -111,8 +111,6 @@ sealed abstract class PLens[S, T, A, B](read: S => A, val enplace: (S, B) => T)
 
   override inline def replace(b: B): S => T = s => enplace(s, b)
 
-  // CPD-OFF — one `CanModifyFP` contract, a fused body per carrier: the signature repeats in every
-  // concrete optic that implements it.
   inline def modify(f: A => B): S => T =
     s => enplace(s, f(get(s)))
 
@@ -124,13 +122,10 @@ sealed abstract class PLens[S, T, A, B](read: S => A, val enplace: (S, B) => T)
   def modifyF[G[_]](f: A => G[B])(using G: Functor[G] & Functor[G]): S => G[T] =
     s => G.map(f(get(s)))(b => enplace(s, b))
 
-  // CPD-ON
-
-  // CPD-OFF — the fused `andThen` matrix: one overload per inner optic, each a carrier-specific
-  // kernel. Measured against the generic `AssociativeFunctor` / `Morph` route (AndThenBench, see the
-  // 2.0 CHANGELOG): never more B/op per call, and only they keep a chain in concrete classes — the
-  // generic route allocates per level (lens∘lens depth 6: 528 vs 120 B/op). The signatures and
-  // the `Optional.fused(…)` shape repeat across them by construction.
+  // The fused `andThen` matrix: one overload per inner optic, each a carrier-specific kernel.
+  // Measured against the generic `AssociativeFunctor` / `Morph` route (AndThenBench, see the 2.0
+  // CHANGELOG): never more B/op per call, and only they keep a chain in concrete classes — the
+  // generic route allocates per level (lens∘lens depth 6: 528 vs 120 B/op).
   /** Fused `Lens.andThen(Lens)` — collapses into another `GetReplaceLens` directly on `get` /
     * `enplace`, skipping the generic `AssociativeFunctor[Tuple2]` round-trip. Scala's overload
     * resolution picks this when both sides are statically `GetReplaceLens`; for mixed-shape
@@ -166,10 +161,7 @@ sealed abstract class PLens[S, T, A, B](read: S => A, val enplace: (S, B) => T)
     Optional.fused(
       getOrModify = s => Optional.liftMiss(inner.tear(get(s)))(b => enplace(s, b)),
       modify = (s, f) => enplace(s, inner.modify(f)(get(s))),
-      to = s =>
-        inner.tear(get(s)) match
-          case Left(b)  => new Affine.Miss[(T, S)](enplace(s, b))
-          case Right(c) => new Affine.Hit[(T, S), C](s, c),
+      to = s => Optional.tearTo(inner.tear(get(s)))(enplace(s, _), s),
       rebuild = (s, d) => enplace(s, inner.mend(d)),
     )
 
@@ -182,9 +174,8 @@ sealed abstract class PLens[S, T, A, B](read: S => A, val enplace: (S, B) => T)
     Optional.fused(
       getOrModify = s =>
         val a = get(s)
-        inner.pick(a) match
-          case Some(c) => Right(c)
-          case None    => Left(enplace(s, ev(a))),
+        Optional.pickOr(inner.pick(a))(enplace(s, ev(a)))
+      ,
       modify = (s, f) =>
         val a = get(s)
         inner.pick(a) match
@@ -192,9 +183,8 @@ sealed abstract class PLens[S, T, A, B](read: S => A, val enplace: (S, B) => T)
           case None    => enplace(s, ev(a)),
       to = s =>
         val a = get(s)
-        inner.pick(a) match
-          case Some(c) => new Affine.Hit[(T, S), C](s, c)
-          case None    => new Affine.Miss[(T, S)](enplace(s, ev(a))),
+        Optional.pickTo(inner.pick(a))(enplace(s, ev(a)), s)
+      ,
       rebuild = (s, d) => enplace(s, ev(inner.mend(d))),
     )
 
@@ -206,8 +196,6 @@ sealed abstract class PLens[S, T, A, B](read: S => A, val enplace: (S, B) => T)
       to = s => Optional.liftTo(inner, get(s))(enplace(s, _), (s, _)),
       rebuild = (m, d) => enplace(m._1, inner.rebuild(m._2, d)),
     )
-
-  // CPD-ON
 
 /** Concrete lens storing `get` and `enplace` directly; the fused-`andThen` overloads on [[PLens]]
   * bypass the `Tuple2` carrier entirely. Returned by every `Lens.*` constructor so hand-written

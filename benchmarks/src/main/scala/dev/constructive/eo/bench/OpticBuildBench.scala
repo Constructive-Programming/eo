@@ -1,12 +1,11 @@
 package dev.constructive.eo
 package bench
 
-import dev.constructive.eo.bench.fixture.*
-import dev.constructive.eo.circe.{codecPrism, JsonPrism}
 import io.circe.Json
 import io.circe.syntax.*
-import java.util.concurrent.TimeUnit
-import org.openjdk.jmh.annotations.*
+
+import fixture.*
+import circe.{codecPrism, JsonPrism}
 
 /** Integration-optic construction / amortization (plan 009, Phase 2).
   *
@@ -23,12 +22,6 @@ import org.openjdk.jmh.annotations.*
   * `reuseUse` ≪ `buildAndUse` means long-lived optics are worth caching; `buildAndUse` ≈ `reuseUse`
   * means construction is negligible and ad-hoc use is fine.
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
 class OpticBuildBench extends JmhDefaults:
 
   import DomainCirce.given

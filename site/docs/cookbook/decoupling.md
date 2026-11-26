@@ -306,20 +306,16 @@ with zero root decodes and zero root encodes; `AvroJsonBridgeBench`
 puts B/op numbers on it.)
 
 ```scala mdoc:silent
-import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
-import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
-import dev.constructive.eo.jsoniter.JsoniterPrism
+import dev.constructive.eo.jsoniter.{JsoniterCodec, JsoniterPrism}
 
-given JsonValueCodec[String] = JsonCodecMaker.make
+given JsoniterCodec[String] = JsoniterCodec.derived
 
 // One byte optic per format, same focus type. Drilled once,
-// reused for every message. (`JsoniterPrism.fromPath` returns an
-// `Either` — a path is data; the literal below is unwrapped here.)
+// reused for every message. (A literal path is checked at compile time;
+// a runtime one goes through `JsoniterPrism.fromPath`, which returns an
+// `Either` — a path is data.)
 val customerAvro = eoavro.codecPrism[OrderEvent].customer
-val customerJson =
-  JsoniterPrism
-    .fromPath[String]("$.customer")
-    .fold(msg => throw new IllegalArgumentException(msg), identity)
+val customerJson = JsoniterPrism.path[String]("$.customer")
 
 // The JSON side's output skeleton. Placeholders must be VALID
 // encodings of the branch type — the splice write decodes the

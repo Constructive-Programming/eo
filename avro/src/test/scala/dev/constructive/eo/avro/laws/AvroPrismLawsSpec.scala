@@ -1,17 +1,6 @@
-package dev.constructive.eo.avro
+package dev.constructive.eo
+package avro
 package laws
-
-import cats.data.Ior
-import dev.constructive.eo.laws.discipline.{OptionalTests, SeamTests}
-import dev.constructive.eo.laws.{OptionalLaws, SeamLaws}
-import dev.constructive.eo.optics.Optic
-import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
-import org.apache.avro.generic.{GenericData, IndexedRecord}
-import org.scalacheck.Prop.forAll
-import org.scalacheck.{Arbitrary, Cogen, Gen}
-import org.specs2.ScalaCheck
-import org.specs2.mutable.Specification
-import org.typelevel.discipline.specs2.mutable.Discipline
 
 /** Unit 9: witness that the record-carried face of [[AvroPrism]] (an [[AvroRecordPrism]], reached
   * via `.record`) is a lawful Optional. The record face is `Affine`-carried, so the honest
@@ -71,7 +60,7 @@ import org.typelevel.discipline.specs2.mutable.Discipline
   */
 class AvroPrismLawsSpec extends Specification with Discipline with ScalaCheck:
 
-  import AvroSpecFixtures.{Person, Transaction, personRecord, transactionRecord}
+  import AvroSpecFixtures.{NameAge, Person, Transaction, personRecord, transactionRecord}
   import AvroPrismLawsSpec.*
   import AvroPrismLawsSpec.given
 
@@ -168,7 +157,6 @@ class AvroPrismLawsSpec extends Specification with Discipline with ScalaCheck:
   //   get(valid record) decodes to a NameAge whose name/age match the Person,
   //   place-then-getOption round-trips the focus,
   //   two-step modify on disjoint fields == composed single .fields modify
-  // CPD-OFF — pre-existing mirror of AvroFieldsPrismSpec; updated in lockstep after removing *Unsafe.
   "AvroFieldsPrism .fields default-Ior forAll: modify-id / modify / get / round-trip / compose" >> forAll {
     (p: Person, suffix: String, newName: String, newAge: Int) =>
       val record = personRecord(p)
@@ -205,7 +193,6 @@ class AvroPrismLawsSpec extends Specification with Discipline with ScalaCheck:
 
       modIdOk && modOk && getOk && roundTripOk && composeOk
   }
-  // CPD-ON
 
   // covers: AvroPrism .union[Long] get-then-place on the Some(long) branch round-trips the long,
   //   .union[Long] modify(identity) on the Some(long) branch is record-equivalent to the input,
@@ -309,16 +296,6 @@ object AvroPrismLawsSpec:
     given AvroEncoder[Pair] = AvroEncoder.derived
     given AvroDecoder[Pair] = AvroDecoder.derived
     given AvroSchemaFor[Pair] = AvroSchemaFor.derived
-
-  // The NamedTuple type the `.fields(_.name, _.age)` macro synthesises — kept here so the forAll
-  // block's `NameAge`-shaped lambdas can ascribe without re-typing.
-
-  type NameAge = NamedTuple.NamedTuple[("name", "age"), (String, Int)]
-
-  // Kindlings codecs for the synthesised NamedTuple.
-  given AvroEncoder[NameAge] = AvroEncoder.derived
-  given AvroDecoder[NameAge] = AvroDecoder.derived
-  given AvroSchemaFor[NameAge] = AvroSchemaFor.derived
 
   // ---- Arbitrary instances for the laws --------------------------
 

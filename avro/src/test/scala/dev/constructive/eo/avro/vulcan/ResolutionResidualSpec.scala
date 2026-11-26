@@ -1,14 +1,9 @@
-package dev.constructive.eo.avro.vulcan
+package dev.constructive.eo
+package avro
+package vulcan
 
-// CPD-OFF — the import block of every spec in this package; a spec header is not a code repeat.
-import scala.language.implicitConversions
-
-import _root_.vulcan.Codec as VCodec
 import cats.syntax.all.*
-import dev.constructive.eo.avro.{codecPrism, PathStep}
-import org.apache.avro.{LogicalTypes, Schema}
-import org.specs2.mutable.Specification
-// CPD-ON
+import org.apache.avro.LogicalTypes
 
 // ==============================================================================================
 // THE RESIDUAL LEDGER, after issue #100's differential codec probe. Every codec below defeated

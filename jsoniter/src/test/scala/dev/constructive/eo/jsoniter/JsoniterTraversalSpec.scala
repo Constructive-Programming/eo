@@ -1,13 +1,11 @@
-package dev.constructive.eo.jsoniter
+package dev.constructive.eo
+package jsoniter
 
-import scala.language.implicitConversions
-
-import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
-import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
 import dev.constructive.eo.data.{MultiFocus, PSVec}
 import dev.constructive.eo.optics.Optic
 import dev.constructive.eo.optics.Optic.*
-import org.specs2.mutable.Specification
+
+import SpecCodecs.given
 
 /** Read-side spec for `JsoniterTraversal`. Exercises:
   *
@@ -19,11 +17,11 @@ import org.specs2.mutable.Specification
   * The write-back splice surface (`.modify` re-encoding each element into the buffer) is covered by
   * `JsoniterTraversalWriteSpec`.
   */
-import JsoniterPathFixtures.traversal
 
 class JsoniterTraversalSpec extends Specification:
 
-  given longCodec: JsonValueCodec[Long] = JsonCodecMaker.make
+  /** A byte-level traversal over `Long` foci, as the generic optic (not the concrete class). */
+  private type LongsT = Optic[Array[Byte], Array[Byte], Long, Long, MultiFocus[PSVec]]
 
   private def bytes(s: String): Array[Byte] = s.getBytes("UTF-8")
 
@@ -59,12 +57,12 @@ class JsoniterTraversalSpec extends Specification:
   "JsoniterTraversal: foldMap over array hits / empty / missing" >> {
     import cats.instances.long.given
 
-    val itemsT: Optic[Array[Byte], Array[Byte], Long, Long, MultiFocus[PSVec]] =
-      traversal[Long]("$.items[*]")
-    val emptyT: Optic[Array[Byte], Array[Byte], Long, Long, MultiFocus[PSVec]] =
-      traversal[Long]("$.empty[*]")
-    val missingT: Optic[Array[Byte], Array[Byte], Long, Long, MultiFocus[PSVec]] =
-      traversal[Long]("$.absent[*]")
+    val itemsT: LongsT =
+      JsoniterTraversal.path[Long]("$.items[*]")
+    val emptyT: LongsT =
+      JsoniterTraversal.path[Long]("$.empty[*]")
+    val missingT: LongsT =
+      JsoniterTraversal.path[Long]("$.absent[*]")
 
     (itemsT.foldMap(identity[Long])(sample) === 15L) // 1+2+3+4+5
       .and(emptyT.foldMap(identity[Long])(sample) === 0L)
@@ -72,8 +70,8 @@ class JsoniterTraversalSpec extends Specification:
   }
 
   "JsoniterTraversal: from is identity in phase-1.5 (returns the original bytes)" >> {
-    val itemsT: Optic[Array[Byte], Array[Byte], Long, Long, MultiFocus[PSVec]] =
-      traversal[Long]("$.items[*]")
+    val itemsT: LongsT =
+      JsoniterTraversal.path[Long]("$.items[*]")
     itemsT.from(itemsT.to(sample)) === sample
   }
 
@@ -81,8 +79,8 @@ class JsoniterTraversalSpec extends Specification:
     import cats.instances.long.given
     // Mixed array — a string element among integers will fail Long decode and get dropped.
     val mixed = bytes("""{"vals":[1,"oops",3,4]}""")
-    val valsT: Optic[Array[Byte], Array[Byte], Long, Long, MultiFocus[PSVec]] =
-      traversal[Long]("$.vals[*]")
+    val valsT: LongsT =
+      JsoniterTraversal.path[Long]("$.vals[*]")
     valsT.foldMap(identity[Long])(mixed) === 8L // 1 + 3 + 4 (the "oops" String drops)
   }
 

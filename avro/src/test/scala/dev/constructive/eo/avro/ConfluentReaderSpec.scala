@@ -1,10 +1,7 @@
-package dev.constructive.eo.avro
+package dev.constructive.eo
+package avro
 
 import cats.instances.either.given
-import dev.constructive.eo.optics.Optic.*
-import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
-import org.apache.avro.Schema
-import org.specs2.mutable.Specification
 
 /** Versioned fixtures for the resolving reader (top-level so kindlings' `new T(...)` derivation
   * isn't tripped by a missing outer accessor):

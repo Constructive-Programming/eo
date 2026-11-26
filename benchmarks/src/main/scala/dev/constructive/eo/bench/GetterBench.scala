@@ -1,9 +1,7 @@
 package dev.constructive.eo
 package bench
 
-import dev.constructive.eo.bench.fixture.*
-import java.util.concurrent.TimeUnit
-import org.openjdk.jmh.annotations.*
+import fixture.*
 
 /** `Getter.get` at the leaf plus deep composition, paired EO vs Monocle.
   *
@@ -14,12 +12,6 @@ import org.openjdk.jmh.annotations.*
   * once — an apples-to-apples comparison, not EO's hand-nested `get` chain against Monocle's
   * composed reader.
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
 class GetterBench extends JmhDefaults:
 
   import NestedOptics.{

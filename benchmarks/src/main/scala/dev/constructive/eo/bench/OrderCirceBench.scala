@@ -4,12 +4,11 @@ package bench
 import scala.compiletime.uninitialized
 
 import cats.data.{Chain, Ior}
-import dev.constructive.eo.bench.fixture.*
-import dev.constructive.eo.circe.JsonFailure
 import io.circe.Json
 import io.circe.syntax.*
-import java.util.concurrent.TimeUnit
-import org.openjdk.jmh.annotations.*
+
+import fixture.*
+import circe.JsonFailure
 
 /** Canonical-schema circe bench (plan 009, Phase 1 proof-of-concept).
   *
@@ -34,12 +33,6 @@ import org.openjdk.jmh.annotations.*
   *     stays flat.
   *   - **array traversal** `lines[*].name` — uppercases every line name across an N-element array.
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
 class OrderCirceBench extends JmhDefaults:
 
   import DomainCirce.{namesTraversal, namesTraversalIor, streetPrism, given}

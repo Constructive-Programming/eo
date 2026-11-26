@@ -24,14 +24,14 @@ optic written by hand.
 
 ```scala mdoc:silent
 // The AST under edit — hosted at package level in
-// dev.constructive.eo.docs (macro-derived optics need top-level
+// dev.constructive.eo.samples (macro-derived optics need top-level
 // targets; mdoc wraps every fence in an object):
 //
 //   enum Expr:
 //     case Var(name: String)
 //     case App(f: Expr, x: Expr)
 //     case Lam(bind: String, body: Expr)
-import dev.constructive.eo.docs.Expr
+import dev.constructive.eo.samples.Expr
 import dev.constructive.eo.generics.{lens, prism}
 
 val varName = prism[Expr, Expr.Var].andThen(lens[Expr.Var](_.name))

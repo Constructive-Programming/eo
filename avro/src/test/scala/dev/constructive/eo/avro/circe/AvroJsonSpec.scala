@@ -1,16 +1,10 @@
-package dev.constructive.eo.avro.circe
+package dev.constructive.eo
+package avro
+package circe
 
 import scala.jdk.CollectionConverters.*
 
-import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
 import io.circe.Json
-import java.io.ByteArrayOutputStream
-import org.apache.avro.Schema
-import org.apache.avro.generic.{GenericData, GenericDatumWriter, GenericRecord, IndexedRecord}
-import org.apache.avro.io.EncoderFactory
-import org.scalacheck.{Arbitrary, Gen}
-import org.specs2.ScalaCheck
-import org.specs2.mutable.Specification
 
 /** Behaviour spec for [[AvroJson]] — the structural Avro ↔ circe bridge.
   *
@@ -142,12 +136,7 @@ class AvroJsonSpec extends Specification with ScalaCheck:
     )
 
   private def toBinary(r: IndexedRecord): Array[Byte] =
-    val out = new ByteArrayOutputStream()
-    val encoder = EncoderFactory.get().binaryEncoder(out, null)
-    val writer = new GenericDatumWriter[IndexedRecord](envSchema)
-    writer.write(r, encoder)
-    encoder.flush()
-    out.toByteArray
+    AvroBinaryCursor.writeDatum(r, envSchema)
 
   // ---- Properties ----------------------------------------------------
 
@@ -379,11 +368,7 @@ class AvroJsonSpec extends Specification with ScalaCheck:
   private val comboRec = comboCodec.encode(combo).asInstanceOf[IndexedRecord]
 
   private def binary(rec: IndexedRecord, schema: Schema): Array[Byte] =
-    val out = new ByteArrayOutputStream()
-    val encoder = EncoderFactory.get().binaryEncoder(out, null)
-    new GenericDatumWriter[IndexedRecord](schema).write(rec, encoder)
-    encoder.flush()
-    out.toByteArray
+    AvroBinaryCursor.writeDatum(rec, schema)
 
   // covers: the fundamental diagonal — typed tear off a generic value, Json mend of any generic
   //   value; a codec-level decode miss surrenders the structural Json view, not the input

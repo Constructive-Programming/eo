@@ -1,7 +1,5 @@
 package dev.constructive.eo
 
-import org.specs2.mutable.Specification
-
 import data.{Affine, IntArrBuilder, MultiFocusFromList, MultiFocusK, ObjArrBuilder, PSVec}
 
 /** Direct coverage for internal machinery that shipped without user-facing specs.

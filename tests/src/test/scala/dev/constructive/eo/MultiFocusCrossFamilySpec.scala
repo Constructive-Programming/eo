@@ -1,11 +1,7 @@
 package dev.constructive.eo
 
 import cats.instances.list.given
-import dev.constructive.eo.compose.*
 import org.scalacheck.Prop.forAll
-import org.scalacheck.{Arbitrary, Prop}
-import org.specs2.ScalaCheck
-import org.specs2.mutable.Specification
 
 import MatrixFixtures.Box
 import data.{Direct, Forget, ModifyF, MultiFocus}

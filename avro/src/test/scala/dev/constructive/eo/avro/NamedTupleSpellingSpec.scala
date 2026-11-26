@@ -1,12 +1,10 @@
-package dev.constructive.eo.avro
+package dev.constructive.eo
+package avro
 
 import scala.compiletime.testing.typeCheckErrors
 
-import dev.constructive.eo.generics.lens
-import dev.constructive.eo.optics.SimpleLens
-import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
-import org.apache.avro.generic.GenericRecord
-import org.specs2.mutable.Specification
+import generics.lens
+import optics.SimpleLens
 
 /** Regression spec for issue #96 — the '''spelling''' of the `NamedTuple` types the eo-generics
   * macros synthesise.

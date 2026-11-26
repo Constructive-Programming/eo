@@ -7,26 +7,17 @@ import scala.annotation.tailrec
 import cats.instances.list.given
 import cats.instances.vector.given
 import cats.{Applicative, Traverse}
-import dev.constructive.eo.generics.plate
-import dev.constructive.eo.optics.Plated as EoPlated
 import io.circe.{Json, JsonNumber, JsonObject}
+import monocle.PTraversal
 import monocle.function.Plated as MPlated
-import monocle.{PTraversal, Traversal as MTraversal}
 
-/** Recursive ADTs + paired EO / Monocle `Plated` instances for the `PlatedUniverseBench`.
-  *
-  * Top-level (not nested) so the `plate[S]` macro's `new V(...)` keeps its outer accessor — the
-  * same reason the generics test fixtures live at package scope.
+import generics.plate
+import optics.Plated as EoPlated
+import samples.{Bin, Expr}
+
+/** Paired EO / Monocle `Plated` instances for the `PlatedUniverseBench`, over the shared sample
+  * ADTs (`dev.constructive.eo.samples`).
   */
-enum Expr:
-  case Var(name: String)
-  case App(f: Expr, x: Expr)
-  case Lam(bind: String, body: Expr)
-
-enum Bin:
-  case Leaf(value: Int)
-  case Node(left: Bin, right: Bin)
-
 object PlatedTrees:
 
   // ----- EO plates -----------------------------------------------------------

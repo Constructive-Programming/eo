@@ -1,10 +1,7 @@
-package dev.constructive.eo.avro
+package dev.constructive.eo
+package avro
 
 import scala.util.control.NonFatal
-
-import java.util.ArrayList
-import org.apache.avro.Schema
-import org.specs2.mutable.Specification
 
 /** The ALL-OR-NOTHING nominal rung, stated as a declarative oracle and checked EXHAUSTIVELY.
   *

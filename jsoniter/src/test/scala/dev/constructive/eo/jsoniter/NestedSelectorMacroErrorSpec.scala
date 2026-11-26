@@ -1,12 +1,11 @@
-package dev.constructive.eo.jsoniter
+package dev.constructive.eo
+package jsoniter
 
 import scala.compiletime.testing.typeCheckErrors
-import scala.language.implicitConversions
 
-import com.github.plokhotnyuk.jsoniter_scala.core.{writeToArray, JsonValueCodec}
-import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
 import dev.constructive.eo.optics.Optic.*
-import org.specs2.mutable.Specification
+
+import SpecCodecs.given
 
 // Fixture ADTs at top level (the convention for macro-facing test types in this module). The outer
 // and inner objects both carry a `y`, which is what turns a one-hop-too-far selector into a
@@ -21,12 +20,10 @@ final case class NsOuter(inner: NsInner, y: String):
 final case class NsBasket(items: List[NsInner])
 
 object NsCodecs:
-  given JsonValueCodec[String] = JsonCodecMaker.make
-  given JsonValueCodec[Int] = JsonCodecMaker.make
-  given JsonValueCodec[NsInner] = JsonCodecMaker.make
-  given JsonValueCodec[List[NsInner]] = JsonCodecMaker.make
-  given JsonValueCodec[NsOuter] = JsonCodecMaker.make
-  given JsonValueCodec[NsBasket] = JsonCodecMaker.make
+  given JsoniterCodec[NsInner] = JsoniterCodec.derived
+  given JsoniterCodec[List[NsInner]] = JsoniterCodec.derived
+  given JsoniterCodec[NsOuter] = JsoniterCodec.derived
+  given JsoniterCodec[NsBasket] = JsoniterCodec.derived
 end NsCodecs
 
 /** The eo-jsoniter mirror of `avro.NestedSelectorMacroErrorSpec` — the cursor macros share one

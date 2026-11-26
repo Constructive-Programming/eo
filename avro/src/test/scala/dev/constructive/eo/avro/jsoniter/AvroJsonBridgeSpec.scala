@@ -1,18 +1,8 @@
-package dev.constructive.eo.avro.jsoniter
+package dev.constructive.eo
+package avro
+package jsoniter
 
-import scala.language.implicitConversions
-
-import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
-import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
-import dev.constructive.eo.avro.{codecPrism, AvroCodec}
-import dev.constructive.eo.jsoniter.JsoniterPrism
-import dev.constructive.eo.optics.Optic.*
-import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
-import java.io.ByteArrayOutputStream
 import java.util.concurrent.atomic.AtomicInteger
-import org.apache.avro.generic.{GenericDatumWriter, IndexedRecord}
-import org.apache.avro.io.EncoderFactory
-import org.specs2.mutable.Specification
 
 /** Cross-format bridge, BOTH directions between `Array[Byte]` (Avro binary) and `Array[Byte]`
   * (JSON), combining [[dev.constructive.eo.avro.AvroPrism]] and [[JsoniterPrism]] — each side reads
@@ -27,9 +17,9 @@ import org.specs2.mutable.Specification
   *     [[BridgeFixtures.rootEncodes]]. Both directions run with both counters at ZERO; the record
   *     face (`.record.get`) as a positive control drives the decode counter up, proving the
   *     counters are wired to the only paths that could materialise an `Envelope`.
-  *   - '''Statically''': no `JsonValueCodec` for any full JSON document exists anywhere in this
-  *     spec — only branch codecs. A full JSON-side object CANNOT be constructed because its codec
-  *     was never derived.
+  *   - '''Statically''': no `JsoniterCodec` for any full JSON document exists anywhere in this spec
+  *     — only branch codecs. A full JSON-side object CANNOT be constructed because its codec was
+  *     never derived.
   *
   * Precision note: "constructed" here means the TYPED root value (`Envelope`) and the whole-
   * document JSON object. A record-SHAPED branch (like `Click`) is materialised as that branch's own
@@ -47,21 +37,13 @@ class AvroJsonBridgeSpec extends Specification:
 
   private def str(b: Array[Byte]): String = new String(b, "UTF-8")
 
-  /** Literal-path prism: `JsoniterPrism.fromPath` returns `Either` (a path is data), and a `Left`
-    * here can only be a typo in this spec — fail the example with the parser's own message.
-    */
-  private def prism[A](path: String)(using JsonValueCodec[A]): JsoniterPrism[A] =
-    JsoniterPrism
-      .fromPath[A](path)
-      .fold(msg => throw new AssertionError(s"test path '$path': $msg"), identity)
-
   "Avro bytes → JSON bytes: branch moves across formats with zero root constructions" >> {
     val env = Envelope("env-7", Click("https://x.example/a?b=1", 42L), "keep-me")
     val avroBytes = BridgeFixtures.toAvroBinary(env)
 
     // The two byte optics, one per format. Drilled once, reusable across payloads.
     val clickAvro = codecPrism[Envelope].field(_.click)
-    val clickJson = prism[Click]("$.click")
+    val clickJson = JsoniterPrism.path[Click]("$.click")
 
     // The click placeholder must be a VALID Click encoding — the Affine write decodes the
     // current focus before splicing (a Hit carries the span AND the decoded value).
@@ -95,7 +77,7 @@ class AvroJsonBridgeSpec extends Specification:
     val avroBytes = BridgeFixtures.toAvroBinary(env)
 
     val idAvro = codecPrism[Envelope].field(_.id)
-    val idJson = prism[String]("$.envelopeId")
+    val idJson = JsoniterPrism.path[String]("$.envelopeId")
     val template: Array[Byte] = """{"envelopeId":"","v":1}""".getBytes("UTF-8")
 
     BridgeFixtures.rootDecodes.set(0)
@@ -115,7 +97,7 @@ class AvroJsonBridgeSpec extends Specification:
     val jsonBytes: Array[Byte] =
       """{"click":{"url":"https://json.example/in","ts":77},"meta":"x"}""".getBytes("UTF-8")
 
-    val clickJson = prism[Click]("$.click")
+    val clickJson = JsoniterPrism.path[Click]("$.click")
     val clickAvro = codecPrism[Envelope].field(_.click)
 
     BridgeFixtures.rootDecodes.set(0)
@@ -191,20 +173,15 @@ object AvroJsonBridgeSpec:
     /** JSON codecs for BRANCHES only (the record branch and a scalar) — deliberately no codec for
       * any full output document exists in this spec.
       */
-    given JsonValueCodec[Click] = JsonCodecMaker.make
-    given JsonValueCodec[String] = JsonCodecMaker.make
+    given JsoniterCodec[Click] = JsoniterCodec.derived
+    given JsoniterCodec[String] = JsoniterCodec.derived
 
     /** Fixture setup: serialise an [[Envelope]] to Avro binary. Uses the codec's encode side (setup
       * necessarily holds a full object; the claim is about the bridge, which doesn't).
       */
     def toAvroBinary(env: Envelope): Array[Byte] =
       val record = summon[AvroCodec[Envelope]].encode(env).asInstanceOf[IndexedRecord]
-      val out = new ByteArrayOutputStream()
-      val writer = new GenericDatumWriter[IndexedRecord](derivedRoot.schema)
-      val encoder = EncoderFactory.get().binaryEncoder(out, null)
-      writer.write(record, encoder)
-      encoder.flush()
-      out.toByteArray
+      AvroBinaryCursor.writeDatum(record, derivedRoot.schema)
 
   end BridgeFixtures
 

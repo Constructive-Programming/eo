@@ -3,14 +3,13 @@ package bench
 
 import scala.compiletime.uninitialized
 
-import dev.constructive.eo.avro.circe.AvroJson
-import dev.constructive.eo.avro.jsoniter.AvroJsoniter
 import io.circe.Json
 import java.nio.charset.StandardCharsets.UTF_8
-import java.util.concurrent.TimeUnit
 import org.apache.avro.Schema
-import org.apache.avro.generic.{GenericDatumWriter, IndexedRecord}
-import org.openjdk.jmh.annotations.*
+import org.apache.avro.generic.GenericDatumWriter
+
+import avro.circe.AvroJson
+import avro.jsoniter.AvroJsoniter
 
 /** Schema-defaults bench (issue #156): the cost of the lenient `recordWithDefaults` read against
   * the strict `record` read, on both structural bridges (circe AST and jsoniter streaming).
@@ -42,12 +41,6 @@ import org.openjdk.jmh.annotations.*
   *   sbt "benchmarks/Jmh/run -f 3 -wi 3 -i 5 -t 1 -prof gc .*AvroJsonDefaultsBench.*"
   * }}}
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
 class AvroJsonDefaultsBench extends JmhDefaults:
 
   private val schema: Schema = new Schema.Parser().parse(

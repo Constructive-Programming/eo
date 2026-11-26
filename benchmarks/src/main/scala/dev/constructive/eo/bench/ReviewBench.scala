@@ -1,9 +1,7 @@
 package dev.constructive.eo
 package bench
 
-import dev.constructive.eo.bench.fixture.*
-import java.util.concurrent.TimeUnit
-import org.openjdk.jmh.annotations.*
+import fixture.*
 
 /** `Review.reverseGet` at the leaf plus deep composition — the BUILD-direction mirror of
   * [[GetterBench]], and the coverage the fused [[dev.constructive.eo.optics.Review.andThen]] needs.
@@ -16,12 +14,6 @@ import org.openjdk.jmh.annotations.*
   * `reverseGet` through it. Monocle has no `Review`, so the peer is a hand-written builder (the
   * floor: plain nested `new`s, no optic).
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
 class ReviewBench extends JmhDefaults:
 
   import NestedOptics.{eoR1, eoR2, eoR3, eoR4, eoR5, eoR6, eoRValue}

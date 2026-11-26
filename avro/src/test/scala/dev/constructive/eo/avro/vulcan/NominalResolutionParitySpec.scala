@@ -1,12 +1,8 @@
-package dev.constructive.eo.avro.vulcan
+package dev.constructive.eo
+package avro
+package vulcan
 
 import scala.jdk.CollectionConverters.*
-import scala.language.implicitConversions
-
-import dev.constructive.eo.avro.{AvroCodec, AvroWalk, NominalResolutionOracle}
-import java.util.ArrayList
-import org.apache.avro.Schema
-import org.specs2.mutable.Specification
 
 /** The DOCTRINE gate for issue #103: the pre-index rung must return the SAME verdict as the scan it
   * replaces, for every input — not merely "the suite is still green".

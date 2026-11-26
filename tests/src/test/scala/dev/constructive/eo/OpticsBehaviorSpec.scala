@@ -1,33 +1,19 @@
 package dev.constructive.eo
 
-import scala.language.implicitConversions
-
 import cats.instances.int.given
 import cats.instances.list.given
 import cats.instances.option.given
-import dev.constructive.eo.compose.*
-import dev.constructive.eo.forgetful.*
 import org.scalacheck.Prop.forAll
-import org.scalacheck.{Gen, Prop}
-import org.specs2.ScalaCheck
-import org.specs2.mutable.Specification
 
 import optics.{
   AffineFold,
   BijectionIso,
   Fold,
   GetReplaceLens,
-  Getter,
-  Iso,
-  Lens,
   MendTearPrism,
   Modify,
-  Optic,
-  Optional,
   PickFold,
-  Prism,
-  Review,
-  Traversal
+  Review
 }
 import optics.Optic.*
 import data.{Affine, Direct, Forget, ModifyF, MultiFocus, MultiFocusSingleton, PSVec}

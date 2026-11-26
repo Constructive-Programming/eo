@@ -1,9 +1,5 @@
 package dev.constructive.eo
 
-import org.specs2.mutable.Specification
-
-import optics.{Prism, Traversal}
-
 enum Shp:
   case Circle(r: Double)
   case Square(s: Double)

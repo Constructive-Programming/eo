@@ -1,12 +1,7 @@
-package dev.constructive.eo.avro
-
-import scala.language.implicitConversions
+package dev.constructive.eo
+package avro
 
 import java.util.Arrays
-import org.scalacheck.Prop.forAll
-import org.scalacheck.{Arbitrary, Gen}
-import org.specs2.ScalaCheck
-import org.specs2.mutable.Specification
 
 /** Behaviour spec for [[ConfluentWire]] — the registry-agnostic Confluent framing helper (magic
   * `0x00` + big-endian 4-byte schema id + Avro binary body).

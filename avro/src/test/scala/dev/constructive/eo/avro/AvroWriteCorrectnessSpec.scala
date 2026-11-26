@@ -1,22 +1,12 @@
-package dev.constructive.eo.avro
+package dev.constructive.eo
+package avro
 
-// CPD-OFF — standard avro spec import prologue; adding `cats.data.Ior` is not new duplication.
-import scala.language.implicitConversions
-
-import cats.data.Ior
-import dev.constructive.eo.data.Affine
-import dev.constructive.eo.optics.Optic.*
-import dev.constructive.eo.optics.{Lens, Optic}
 import java.io.ByteArrayOutputStream
-import java.util.{ArrayList, Arrays}
-import org.apache.avro.Schema
-import org.apache.avro.generic.{GenericDatumWriter, GenericRecord, IndexedRecord}
+import java.util.Arrays
+import org.apache.avro.generic.GenericDatumWriter
 import org.apache.avro.io.EncoderFactory
-import org.scalacheck.Prop.forAll
-import org.scalacheck.{Arbitrary, Gen}
-import org.specs2.ScalaCheck
-import org.specs2.mutable.Specification
-// CPD-ON
+
+import data.Affine
 
 /** Outer wrapper for the compose-through-a-lens regression — top-level so the hand-built
   * [[dev.constructive.eo.optics.Lens]] `.copy` works without an outer accessor.
@@ -60,11 +50,6 @@ class AvroWriteCorrectnessSpec extends Specification with ScalaCheck:
   given AvroEncoder[LastFirst] = AvroEncoder.derived
   given AvroDecoder[LastFirst] = AvroDecoder.derived
   given AvroSchemaFor[LastFirst] = AvroSchemaFor.derived
-
-  type NamePrice = NamedTuple.NamedTuple[("name", "price"), (String, Double)]
-  given AvroEncoder[NamePrice] = AvroEncoder.derived
-  given AvroDecoder[NamePrice] = AvroDecoder.derived
-  given AvroSchemaFor[NamePrice] = AvroSchemaFor.derived
 
   type UserDomain = NamedTuple.NamedTuple[("user", "domain"), (String, String)]
   given AvroEncoder[UserDomain] = AvroEncoder.derived
@@ -338,14 +323,12 @@ class AvroWriteCorrectnessSpec extends Specification with ScalaCheck:
     val ledger = Ledger("ann", List(Cash(100L), Card("4111"), Cash(250L)))
     val rec = ledgerRecord(ledger)
     val blocked = toBlockedBinary(rec, ledgerSchema)
-    // CPD-OFF — shares the `cashT` setup line with the framing block above; touched by *Unsafe removal (#101).
     val bytes = toBinary(rec, ledgerSchema)
     val cashT = codecPrism[Ledger].field(_.entries).each.union[Cash]
     val recordOut = cashT.record.modify(c => Cash(c.amount + 5L))(rec) match
       case Ior.Both(_, out) =>
         codecPrism[Ledger].getOption(toBinary(out.asInstanceOf[GenericRecord], ledgerSchema))
       case _ => None
-    // CPD-ON
 
     // Read: only the Cash-branch elements fold in, in order.
     (cashT.foldMap(List(_))(blocked) === List(Cash(100L), Cash(250L)))

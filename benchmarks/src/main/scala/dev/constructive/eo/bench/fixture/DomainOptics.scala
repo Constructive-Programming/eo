@@ -2,15 +2,8 @@ package dev.constructive.eo
 package bench
 package fixture
 
-import dev.constructive.eo.optics.{
-  AffineFold,
-  PickFold,
-  Getter as EoGetter,
-  Modify as EoModify,
-  Optional as EoOptional
-}
-import dev.constructive.eo.generics.lens
-import monocle.{Getter as MGetter, Lens as MLens, Optional as MOptional, Setter as MSetter}
+import generics.lens
+import optics.{AffineFold, Getter as EoGetter, Modify as EoModify, Optional as EoOptional, PickFold}
 
 /** Canonical in-memory EO + Monocle optics over the decoded [[Order]], for the per-family
   * micro-benches that don't go through a byte/AST backend (`GetterBench`, `SetterBench`,

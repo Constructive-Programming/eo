@@ -2,11 +2,11 @@ package dev.constructive.eo
 package bench
 package fixture
 
-import com.github.plokhotnyuk.jsoniter_scala.core.{JsonReader, JsonValueCodec, JsonWriter}
-import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
-import dev.constructive.eo.data.{Affine, MultiFocus, PSVec}
-import dev.constructive.eo.jsoniter.{JsoniterPrism, JsoniterTraversal}
-import dev.constructive.eo.optics.Optic
+import com.github.plokhotnyuk.jsoniter_scala.core.{JsonReader, JsonWriter}
+
+import data.{Affine, MultiFocus, PSVec}
+import jsoniter.{JsoniterCodec, JsoniterPrism, JsoniterTraversal}
+import optics.Optic
 
 /** jsoniter-scala codecs, EO jsoniter optics, and hand-rolled partial-scan codecs for the canonical
   * [[Order]] schema, shared by `OrderJsoniterBench` and the eo-jsoniter side of `JsoniterBench`.
@@ -20,43 +20,33 @@ object DomainJsoniter:
 
   // ---- whole-document + leaf codecs ---------------------------------
 
-  given JsonValueCodec[Order] = JsonCodecMaker.make
-  given JsonValueCodec[Long] = JsonCodecMaker.make
-  given JsonValueCodec[String] = JsonCodecMaker.make
-  given JsonValueCodec[Double] = JsonCodecMaker.make
+  given JsoniterCodec[Order] = JsoniterCodec.derived
+  given JsoniterCodec[Long] = JsoniterCodec.derived
+  given JsoniterCodec[String] = JsoniterCodec.derived
+  given JsoniterCodec[Double] = JsoniterCodec.derived
 
   // ---- EO jsoniter optics (JSONPath) --------------------------------
 
-  /** Literal-path constructors for the HARNESS. `JsoniterPrism.fromPath` /
-    * `JsoniterTraversal.fromPath` return `Either` (a path is data); the paths below are literals in
-    * this file, so a `Left` is a broken benchmark definition and failing fast is the right answer.
-    * (Library callers handle the message instead — that is the point of the signature.)
-    */
-  private def prism[A](path: String)(using JsonValueCodec[A]): JsoniterPrism[A] =
-    JsoniterPrism
-      .fromPath[A](path)
-      .fold(msg => throw new IllegalArgumentException(s"bench path '$path': $msg"), identity)
-
-  private def traversal[A](path: String)(using JsonValueCodec[A]): JsoniterTraversal[A] =
-    JsoniterTraversal
-      .fromPath[A](path)
-      .fold(msg => throw new IllegalArgumentException(s"bench path '$path': $msg"), identity)
+  // The optics are held as the generic `Optic`, not the concrete jsoniter classes, so every bench
+  // calls them through the same surface as the other backends.
+  type BytesPrism[A] = Optic[Array[Byte], Array[Byte], A, A, Affine]
+  type BytesTraversal[A] = Optic[Array[Byte], Array[Byte], A, A, MultiFocus[PSVec]]
 
   /** depth-1 scalar `$.id` (`Long`) — read / replace / modify vehicle. */
-  val idPrism: Optic[Array[Byte], Array[Byte], Long, Long, Affine] =
-    prism[Long]("$.id")
+  val idPrism: BytesPrism[Long] =
+    JsoniterPrism.path[Long]("$.id")
 
   /** depth-3 scalar `$.customer.address.street` (`String`). */
-  val streetPrism: Optic[Array[Byte], Array[Byte], String, String, Affine] =
-    prism[String]("$.customer.address.street")
+  val streetPrism: BytesPrism[String] =
+    JsoniterPrism.path[String]("$.customer.address.street")
 
   /** a deliberately-absent path `$.customer.absent` — the honest "miss" stress test. */
-  val absentPrism: Optic[Array[Byte], Array[Byte], Long, Long, Affine] =
-    prism[Long]("$.customer.absent")
+  val absentPrism: BytesPrism[Long] =
+    JsoniterPrism.path[Long]("$.customer.absent")
 
   /** array fold `$.lines[*].price` (`Double`). */
-  val pricesTraversal: Optic[Array[Byte], Array[Byte], Double, Double, MultiFocus[PSVec]] =
-    traversal[Double]("$.lines[*].price")
+  val pricesTraversal: BytesTraversal[Double] =
+    JsoniterTraversal.path[Double]("$.lines[*].price")
 
   // ---- hand-rolled partial-scan codecs ------------------------------
 
@@ -82,9 +72,9 @@ object DomainJsoniter:
 
   /** Hand-rolled scanner for `$.customer.address.street` — walks only the path and `skip()`s
     * siblings, so the full `Order` is never materialised. A plain `val` (not `given`) so it doesn't
-    * collide with the derived `JsonValueCodec[String]`; passed explicitly to `readFromArray`.
+    * collide with the derived `JsoniterCodec[String]`; passed explicitly to `readFromArray`.
     */
-  val streetScanCodec: JsonValueCodec[String] = new JsonValueCodec[String]:
+  val streetScanCodec: JsoniterCodec[String] = new JsoniterCodec[String]:
     def nullValue: String = null
     def encodeValue(x: String, out: JsonWriter): Unit = out.writeVal(x)
     def decodeValue(in: JsonReader, default: String): String =
@@ -98,7 +88,7 @@ object DomainJsoniter:
     * `price`, and `skip()`s every sibling at both levels. The line objects are never fully
     * materialised.
     */
-  val pricesSumScanCodec: JsonValueCodec[Double] = new JsonValueCodec[Double]:
+  val pricesSumScanCodec: JsoniterCodec[Double] = new JsoniterCodec[Double]:
     def nullValue: Double = 0.0
     def encodeValue(x: Double, out: JsonWriter): Unit = out.writeVal(x)
     def decodeValue(in: JsonReader, default: Double): Double =

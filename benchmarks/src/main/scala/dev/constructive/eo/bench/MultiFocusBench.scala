@@ -4,10 +4,9 @@ package bench
 import scala.compiletime.uninitialized
 
 import cats.instances.list.*
-import dev.constructive.eo.bench.fixture.*
-import dev.constructive.eo.data.MultiFocus
-import java.util.concurrent.TimeUnit
-import org.openjdk.jmh.annotations.*
+
+import fixture.*
+import data.MultiFocus
 
 /** `MultiFocus[List]` (via `fromLensF`) vs `MultiFocus[PSVec]` (via `Traversal.each[List, _]`) on
   * the same `Lens[Order, List[LineItem]] → inner → Lens[LineItem, Int]` chain over the canonical
@@ -19,12 +18,6 @@ import org.openjdk.jmh.annotations.*
   * [[MultiFocusCollectBench]]; the duplicate ArraySeq PSVec path (identical to
   * [[PowerSeriesBench]]) was dropped — see plan 009, Phase 3.
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
 class MultiFocusBench extends JmhDefaults:
 
   @Param(Array("4", "32", "256", "1024"))

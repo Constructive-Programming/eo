@@ -1,14 +1,13 @@
 package dev.constructive.eo
 package bench
 
-import dev.constructive.eo.bench.fixture.*
-import dev.constructive.eo.bench.fixture.PlatedTrees.eoBin // given Plated[Bin]
-import dev.constructive.eo.bench.fixture.SchemesFixtures.given
-import dev.constructive.eo.schemes.Schemes
 import higherkindness.droste.data.Fix
 import higherkindness.droste.scheme
-import java.util.concurrent.TimeUnit
-import org.openjdk.jmh.annotations.*
+
+import fixture.*
+import fixture.PlatedTrees.eoBin // given Plated[Bin]
+import fixture.SchemesFixtures.given
+import schemes.Schemes
 
 /** Recursion schemes — `cata` / `ana` / `hylo` — three ways, on the same workload:
   *
@@ -24,12 +23,6 @@ import org.openjdk.jmh.annotations.*
   * JMH caveats apply (see the repo's bench docs): trustworthy comparison needs a quiet box, and the
   * heap-allocation (`-prof gc`, B/op) signal is steadier than ns/op here.
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
 class SchemesBench extends JmhDefaults:
   import SchemesFixtures.*
 

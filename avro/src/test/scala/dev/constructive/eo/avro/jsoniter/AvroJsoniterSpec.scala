@@ -1,19 +1,10 @@
-package dev.constructive.eo.avro.jsoniter
+package dev.constructive.eo
+package avro
+package jsoniter
 
-import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
-import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
-import dev.constructive.eo.avro.{codecPrism, AvroBinaryCursor, AvroCodec}
-import dev.constructive.eo.jsoniter.JsoniterPrism
-import dev.constructive.eo.optics.Optic.*
-import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
-import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets.UTF_8
-import org.apache.avro.Schema
-import org.apache.avro.generic.{GenericData, GenericDatumWriter, GenericRecord, IndexedRecord}
-import org.apache.avro.io.EncoderFactory
 import org.apache.avro.util.Utf8
-import org.specs2.mutable.Specification
 
 /** Behaviour of the structural Avro → JSON-bytes bridge. The rendering conventions under test are
   * `AvroJson`'s (see that scaladoc) — this spec pins the jsoniter rendering to exact JSON text so a
@@ -75,11 +66,7 @@ class AvroJsoniterSpec extends Specification:
     rec
 
   def toAvroBinary(rec: IndexedRecord): Array[Byte] =
-    val out = new ByteArrayOutputStream()
-    val encoder = EncoderFactory.get().binaryEncoder(out, null)
-    new GenericDatumWriter[IndexedRecord](rec.getSchema).write(rec, encoder)
-    encoder.flush()
-    out.toByteArray
+    AvroBinaryCursor.writeDatum(rec, rec.getSchema)
 
   "avroToJson" should {
     "render every branch of the walk with AvroJson's conventions" in {
@@ -421,9 +408,9 @@ object AvroJsoniterSpec:
   given AvroSchemaFor[NameActive] = AvroSchemaFor.derived
 
   // jsoniter codecs for the `.avro` face drilling (root + each drilled focus type)
-  given JsonValueCodec[Combo] = JsonCodecMaker.make
-  given JsonValueCodec[String] = JsonCodecMaker.make
-  given JsonValueCodec[Long] = JsonCodecMaker.make
+  given JsoniterCodec[Combo] = JsoniterCodec.derived
+  given JsoniterCodec[String] = JsoniterCodec.derived
+  given JsoniterCodec[Long] = JsoniterCodec.derived
 
 end AvroJsoniterSpec
 

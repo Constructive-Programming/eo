@@ -1,10 +1,8 @@
 package dev.constructive.eo
 package bench
 
-import dev.constructive.eo.bench.fixture.*
-import dev.constructive.eo.generics.{lens, prism}
-import java.util.concurrent.TimeUnit
-import org.openjdk.jmh.annotations.*
+import fixture.*
+import generics.{lens, prism}
 
 /** Runtime-parity check for `eo-generics` derivation (plan 009, Phase 2).
   *
@@ -18,12 +16,6 @@ import org.openjdk.jmh.annotations.*
   *   - `hand*` — the equivalent hand-written `EoLens` / `EoPrism`.
   *   - `raw*` — plain `copy` / pattern-match, no optic at all (the floor).
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
 class GenericsBench extends JmhDefaults:
 
   private val person: GPerson = GPerson("Alice", 30)

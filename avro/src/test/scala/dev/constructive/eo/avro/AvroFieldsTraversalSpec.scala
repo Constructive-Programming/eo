@@ -1,13 +1,7 @@
-package dev.constructive.eo.avro
+package dev.constructive.eo
+package avro
 
-import scala.language.implicitConversions
-
-import cats.data.Ior
-import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
-import java.util.{ArrayList, List as JList}
-import org.apache.avro.Schema
-import org.apache.avro.generic.{GenericData, IndexedRecord}
-import org.specs2.mutable.Specification
+import java.util.List as JList
 
 /** Behaviour spec for the multi-field array traversal ([[AvroTraversal]] with a Fields focus)
   * produced by `AvroTraversal.fields(_.a, _.b, ...)` (Unit 6).
@@ -19,8 +13,6 @@ import org.specs2.mutable.Specification
 class AvroFieldsTraversalSpec extends Specification:
 
   import AvroSpecFixtures.*
-  import AvroFieldsTraversalSpec.*
-  import AvroFieldsTraversalSpec.given
 
   /** Build a basket whose `items` array holds `elems`, then run the multi-field traversal
     * `.record.modify(f)`.
@@ -69,7 +61,6 @@ class AvroFieldsTraversalSpec extends Specification:
       )
     )
 
-    // CPD-OFF — pre-existing mirror of JsonFieldsTraversalSpec; touched by *Unsafe removal (#101).
     val ior = codecPrism[Basket].items.each.fields(_.name, _.price).record.modify(f)(record)
     val correct = ior match
       case Ior.Right(out) => recordsEqual(out, expected)
@@ -90,7 +81,6 @@ class AvroFieldsTraversalSpec extends Specification:
     val qtyOk = firstItem.get(firstItem.getSchema.getField("qty").pos) === 7
 
     (correct === true).and(getAllOk).and(qtyOk)
-    // CPD-ON
   }
 
   // ---- Per-element atomicity (D4) ---------------------------------
@@ -218,15 +208,5 @@ class AvroFieldsTraversalSpec extends Specification:
       .and(missingOk)
       .and(placeOk === true)
   }
-
-end AvroFieldsTraversalSpec
-
-object AvroFieldsTraversalSpec:
-
-  type NamePrice = NamedTuple.NamedTuple[("name", "price"), (String, Double)]
-
-  given AvroEncoder[NamePrice] = AvroEncoder.derived
-  given AvroDecoder[NamePrice] = AvroDecoder.derived
-  given AvroSchemaFor[NamePrice] = AvroSchemaFor.derived
 
 end AvroFieldsTraversalSpec

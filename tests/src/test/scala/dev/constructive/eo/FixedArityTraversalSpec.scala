@@ -1,9 +1,7 @@
 package dev.constructive.eo
 
 import cats.instances.list.given
-import org.specs2.mutable.Specification
 
-import optics.{Lens, Optic, Prism, Traversal}
 import optics.Optic.*
 import data.{MultiFocus, PSVec}
 

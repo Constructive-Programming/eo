@@ -2,6 +2,7 @@ package dev.constructive.eo.spark
 package bench
 
 import dev.constructive.eo.CanModify
+import dev.constructive.eo.bench.JmhDefaults
 import java.util.concurrent.TimeUnit
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.functions.{col, concat, hash, lit, struct, sum, upper}
@@ -30,13 +31,11 @@ object BenchFns:
   *   - `handMap` / `identityMap`: the same typed `Dataset.map` with a hand-written `copy` / with
   *     `identity` — what the bridge costs without eo, and what the object round trip alone costs.
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
 @OutputTimeUnit(TimeUnit.MILLISECONDS)
 @Warmup(iterations = 2)
 @Measurement(iterations = 5)
 @Fork(1)
-class NestedEditBench:
+class NestedEditBench extends JmhDefaults:
 
   import DatasetOptics.*
   import SparkEncoders.given

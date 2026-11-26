@@ -3,9 +3,8 @@ package dev.constructive.eo
 import scala.collection.immutable.SortedSet
 
 import cats.data.Ior
-import org.specs2.mutable.Specification
 
-import optics.{Fold, Lens, Modify, Traversal}
+import optics.{Fold, Modify}
 
 /** Behaviour pins for the cats-typeclass optic constructors on the optic companions: construct via
   * optic, consume via capability — the given declarations belong to the client (bind a constructor

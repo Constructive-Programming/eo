@@ -4,10 +4,9 @@ package avro
 import scala.annotation.tailrec
 
 import cats.Eq
-import dev.constructive.eo.optics.Plated
 import org.apache.avro.SchemaBuilder
-import org.apache.avro.generic.{GenericData, IndexedRecord}
-import org.specs2.mutable.Specification
+
+import optics.Plated
 
 /** `Plated[IndexedRecord]` — recursive walk over a nested-record Avro tree. Concrete examples (an
   * `Arbitrary[IndexedRecord]` generator would need a self-referential schema, which the universal

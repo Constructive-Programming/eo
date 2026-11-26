@@ -1,11 +1,9 @@
 package dev.constructive.eo
 
 import cats.{Functor, Representable}
-import org.specs2.mutable.Specification
 
-import optics.{AffineFold, Lens, Optic, Optional, PickFold}
+import optics.{AffineFold, PickFold}
 import data.{Affine, ModifyF}
-import forgetful.ForgetfulFunctor
 import laws.{AffineFoldLaws, LensLaws, OptionalLaws, TargetingLaws}
 import laws.data.ModifyFLaws
 

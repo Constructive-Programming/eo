@@ -8,7 +8,7 @@ package dev.constructive.eo
   *   import dev.constructive.eo.optics.Optic.*
   *   import dev.constructive.eo.optics.{Lens => EoLens, Prism => EoPrism, Traversal => EoTraversal}
   *   import scala.collection.immutable.ArraySeq
-  *   import scala.compiletime.uninitialized
+  *     *
   * }}}
   *
   * The re-exports below pull the most-frequently-imported names into package scope so per-file

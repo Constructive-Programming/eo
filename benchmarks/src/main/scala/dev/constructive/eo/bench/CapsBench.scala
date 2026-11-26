@@ -1,13 +1,14 @@
 package dev.constructive.eo
 package bench
 
-import cats.{Applicative, Functor}
 import cats.instances.list.given
 import cats.instances.option.given
 import cats.instances.vector.given
-import dev.constructive.eo.bench.fixture.*
-import dev.constructive.eo.data.{Forget, MultiFocus, PSVec}
-import dev.constructive.eo.optics.{
+import cats.{Applicative, Functor}
+
+import fixture.*
+import data.{Forget, MultiFocus, PSVec}
+import optics.{
   Fold as EoFold,
   ForgetFold,
   GetReplaceLens,
@@ -15,8 +16,6 @@ import dev.constructive.eo.optics.{
   Optic,
   Traversal as EoTraversal,
 }
-import java.util.concurrent.TimeUnit
-import org.openjdk.jmh.annotations.*
 
 /** Capability-call vs direct-call on the canonical [[Order]] — the evidence behind the "consume via
   * capability" doctrine. Four variants per operation:
@@ -35,12 +34,6 @@ import org.openjdk.jmh.annotations.*
   * Numbers are read off the CI benchmarks workflow only (local boxes are too noisy for the ns
   * deltas at stake); `-prof gc` distinguishes wrapper allocation from EA-elided cost.
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
 class CapsBench extends JmhDefaults:
 
   val order: Order = Domain.mkOrder(8)

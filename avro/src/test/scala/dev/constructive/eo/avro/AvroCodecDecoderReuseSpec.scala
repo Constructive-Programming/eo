@@ -1,16 +1,11 @@
-package dev.constructive.eo.avro
-
-import scala.language.implicitConversions
+package dev.constructive.eo
+package avro
 
 import java.io.ByteArrayInputStream
 import java.util.concurrent.ConcurrentLinkedQueue
-import org.apache.avro.Schema
-import org.apache.avro.generic.{GenericData, GenericDatumReader, GenericRecord, IndexedRecord}
+import org.apache.avro.generic.GenericDatumReader
 import org.apache.avro.io.DecoderFactory
-import org.scalacheck.Gen
 import org.scalacheck.Prop.forAllNoShrink
-import org.specs2.ScalaCheck
-import org.specs2.mutable.Specification
 
 /** Decode-path reuse in [[AvroCodec]] — the per-thread `GenericDatumReader` cache and reusable
   * `BinaryDecoder` that replaced the fresh-allocate-per-decode code (`new GenericDatumReader(…)` +

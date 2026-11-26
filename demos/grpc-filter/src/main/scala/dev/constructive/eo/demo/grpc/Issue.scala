@@ -9,7 +9,7 @@ import com.github.plokhotnyuk.jsoniter_scala.core.{
   JsonWriter
 }
 import com.github.plokhotnyuk.jsoniter_scala.macros.{CodecMakerConfig, JsonCodecMaker}
-import dev.constructive.eo.jsoniter.JsonSlice
+import dev.constructive.eo.jsoniter.{JsonSlice, JsoniterCodec}
 
 /** One message of the stream: an issue, as an issue tracker publishes it. 64 fields. The 61st,
   * `detail`, is one of three kinds of issue, each with its own fields, nested up to three objects
@@ -86,7 +86,7 @@ final case class Issue(
 
 object Issue:
   /** The whole message, every field: what the source writes and the baseline reads. */
-  given JsonValueCodec[Issue] = JsonCodecMaker.make
+  given JsoniterCodec[Issue] = JsoniterCodec.derived
 
   /** The whole message decoded, if it decodes. jsoniter-scala reports bytes that don't decode by
     * throwing: this is the one place that becomes a value.
@@ -104,7 +104,7 @@ enum Detail:
   case Request(product: String, votes: Votes, quarter: String, requester: Customer)
 
 object Detail:
-  given JsonValueCodec[Detail] = JsonCodecMaker.make
+  given JsoniterCodec[Detail] = JsoniterCodec.derived
 
 /** Which of the three kinds a message is: the classification. Spelled as `Detail`'s cases, so it
   * decodes straight from the `"type"` field.

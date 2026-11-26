@@ -39,11 +39,9 @@ object LensMacro:
 /** Hearth-backed Lens macro implementation. Brings the high-level `CaseClass` / `Type` views into
   * scope.
   */
-final private class HearthLensMacro(q: Quotes) extends _root_.hearth.MacroCommonsScala3(using q):
+final private class HearthLensMacro(q: Quotes) extends HearthMacro(q):
 
   import quotes.reflect.*
-  import _root_.hearth.fp.Id
-  import _root_.hearth.fp.instances.*
 
   /** Recover selector exprs, validate arity / cover / duplicates, dispatch:
     *   - 1 selector + partial cover → [[deriveSingle]] (`SimpleLens`).

@@ -1,12 +1,9 @@
 package dev.constructive.eo
 
-import scala.language.implicitConversions
-
 import cats.Functor
 import cats.instances.list.given
-import org.specs2.mutable.Specification
 
-import optics.{BijectionIso, Optic, Review, Unfold}
+import optics.{BijectionIso, Review, Unfold}
 import data.Forget
 
 /** One-layer pattern functor for the `Unfold.algebra` cases — `Functor` but deliberately NO

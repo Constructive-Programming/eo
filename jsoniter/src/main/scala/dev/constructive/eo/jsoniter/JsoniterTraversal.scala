@@ -101,45 +101,13 @@ final class JsoniterTraversal[A] private[jsoniter] (
   ): JsoniterTraversal[B] =
     new JsoniterTraversal[B](steps)
 
-object JsoniterTraversal:
-
-  /** Build a read-write Traversal over a JSON byte buffer at the given JSONPath — the ONLY
-    * string-path constructor, and it keeps the failure in the type. The path MAY contain `[*]`
-    * wildcard steps (without them, this collapses to a single-or-zero-focus Traversal that still
-    * uses the MultiFocus[PSVec] carrier — fine, just narrower). An unparseable path comes back as
-    * `Left(message)`: a path is DATA, so there is no throwing twin to reach for.
-    *
-    * @example
-    *   {{{
-    * import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
-    * given codec: JsonValueCodec[Long] = JsonCodecMaker.make
-    *
-    * val itemsT: Either[String, JsoniterTraversal[Long]] =
-    *   JsoniterTraversal.fromPath[Long]("$.cart.items[*]")
-    * val bytes: Array[Byte] = ...
-    * itemsT.map(_.foldMap(identity[Long])(bytes))  // Either[String, Long], zero AST allocation
-    * itemsT.map(_.modify(_ * 10)(bytes))           // Either[String, Array[Byte]], spliced in place
-    *   }}}
-    *
-    * @group Constructors
-    */
-  def fromPath[A](path: String)(using
-      codec: JsonValueCodec[A]
-  ): Either[String, JsoniterTraversal[A]] =
-    PathParser
-      .parse(path)
-      .map(steps => fromSteps[A](steps))
-      .left
-      .map(e => s"invalid JSONPath '$path': $e")
-
-  /** Build a Traversal from an already-parsed step list.
-    *
-    * @group Optics
-    */
-  private[jsoniter] def fromSteps[A](steps: List[PathStep])(using
-      codec: JsonValueCodec[A]
-  ): JsoniterTraversal[A] =
-    new JsoniterTraversal[A](steps)
+object JsoniterTraversal
+    extends JsoniterPathConstructors[JsoniterTraversal](
+      [A] =>
+        (steps: List[PathStep], codec: JsonValueCodec[A]) =>
+          new JsoniterTraversal[A](steps)(using codec),
+      (_, steps) => Right(steps), // `[*]` is what a traversal is for
+    ):
 
   /** Encode each focus, paired with its span; an element whose encode throws is left out, so it
     * keeps its original bytes (see the class doc). `spans` and `foci` are 1:1.

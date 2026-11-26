@@ -1,17 +1,11 @@
 package dev.constructive.eo
 package bench
 
-import java.util.concurrent.TimeUnit
-
 import cats.syntax.all.*
-import org.openjdk.jmh.annotations.*
-
-import _root_.vulcan.Codec as VCodec
+import org.apache.avro.Schema
 
 import avro.vulcan.AvroVulcan
 import avro.{codecPrism, AvroCodec, AvroPrism}
-import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
-import org.apache.avro.Schema
 
 /** vulcan → eo bridge (`AvroVulcan.codec`, issue #73) vs the kindlings-native path.
   *
@@ -75,12 +69,6 @@ object AvroVulcanImpls:
   val nativeCount: AvroPrism[Long] = nativeRoot.field(_.count)
   val bridgedCount: AvroPrism[Long] = bridgedRoot.field(_.count)
 
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
 class AvroVulcanBench extends JmhDefaults:
 
   import AvroVulcanImpls.*

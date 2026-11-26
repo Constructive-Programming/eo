@@ -3,12 +3,10 @@ package bench
 
 import scala.compiletime.uninitialized
 
-import com.github.plokhotnyuk.jsoniter_scala.core.writeToArray
-import dev.constructive.eo.bench.fixture.*
 import io.circe.Json
 import io.circe.parser.parse as circeParse
-import java.util.concurrent.TimeUnit
-import org.openjdk.jmh.annotations.*
+
+import fixture.*
 
 /** `eo-jsoniter` vs `eo-circe` on the canonical [[Order]] — the cross-EO comparison the
   * `Order*Bench` baselines don't cover (those pit one backend against native/naive/monocle).
@@ -32,12 +30,6 @@ import org.openjdk.jmh.annotations.*
   * `@Param size` grows the surrounding document so the parse cost (circe) climbs while the
   * byte-walk (jsoniter) stays focus-local.
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
 class JsoniterBench extends JmhDefaults:
 
   import DomainJsoniter.given

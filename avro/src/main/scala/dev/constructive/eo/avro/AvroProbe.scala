@@ -243,8 +243,8 @@ object AvroProbe extends AvroProbeLowPriority:
 
   // ---- the probe ------------------------------------------------------
 
-  // CPD-OFF — the two verdict entry points differ only in the RULE they hand `verdict`; the guard,
-  // cache and sentinel path they share is the point of the pair.
+  // The two verdict entry points differ only in the RULE they hand `verdict`; the guard, cache and
+  // sentinel path they share is the point of the pair.
   /** Strict verdict for `.field(_.x)`: `declIdx`'s schema field name, established by encoding two
     * sentinels of `codec`'s type and requiring the changed slot to hold `fieldCodec`'s encoding of
     * the perturbed value (and of the baseline value in the baseline record). `None` whenever the
@@ -281,7 +281,6 @@ object AvroProbe extends AvroProbeLowPriority:
     verdict(codec, declIdx, strict = false, parent, slots)((s, pairs) =>
       run(codec, s, pairs, declIdx, None)
     )
-  // CPD-ON
 
   /** The one path both verdict rules run: the parent guard, the cached verdict, the sentinels, then
     * the rule.
@@ -295,8 +294,8 @@ object AvroProbe extends AvroProbeLowPriority:
     * at the optic's path. They are the same schema for any consistent codec, and this is what keeps
     * a hand-built inconsistent one from re-aiming a call site at a name the walk cannot reach.
     */
-  // CPD-OFF — `verdict` and `withPairs` are two steps of ONE pipeline (guard + cache, then
-  // sentinels + bounds); their `Option` plumbing is shared on purpose.
+  // `verdict` and `withPairs` are two steps of ONE pipeline (guard + cache, then sentinels +
+  // bounds); their `Option` plumbing is shared on purpose.
   private def verdict[A](
       codec: AvroCodec[A],
       declIdx: Int,
@@ -319,7 +318,6 @@ object AvroProbe extends AvroProbeLowPriority:
     slots.flatMap { s =>
       pairsOf(s).flatMap { pairs =>
         if declIdx < 0 || declIdx >= pairs.length then None else rule(s, pairs)
-        // CPD-ON
       }
     }
 
@@ -548,8 +546,8 @@ object AvroProbe extends AvroProbeLowPriority:
         drain()
     drain()
 
-  // CPD-OFF — the identity-keyed cache face MIRRORS `AvroWalk.SchemaId`'s, deliberately: same
-  // identity-hash contract, same cleared-weak-key removal rule. Two caches, one shape to audit.
+  // The identity-keyed cache face MIRRORS `AvroWalk.SchemaId`'s, deliberately: same identity-hash
+  // contract, same cleared-weak-key removal rule. Two caches, one shape to audit.
   sealed private trait ProbeKey:
     def codecRef: AnyRef | Null
     def declIdx: Int
@@ -570,7 +568,6 @@ object AvroProbe extends AvroProbeLowPriority:
         case _ => false
 
   end ProbeKey
-  // CPD-ON
 
   /** Throwaway lookup key — a plain object, so a cache HIT costs no `WeakReference` registration.
     */
@@ -599,8 +596,8 @@ private[avro] trait AvroProbeLowPriority:
 
   import AvroProbe.{AltProbes, FieldProbes}
 
-  // CPD-OFF — the two `Mirror` derivations (product / sum) share the `given` head and the `pair`
-  // shape; the bodies are the two different constructions.
+  // The two `Mirror` derivations (product / sum) share the `given` head and the `pair` shape; the
+  // bodies are the two different constructions.
   /** A case class: one sentinel pair per field, built through the `Mirror`. */
   given product[A](using
       m: Mirror.ProductOf[A],
@@ -632,7 +629,5 @@ private[avro] trait AvroProbeLowPriority:
           case Some(values) if values.length >= 2 =>
             Some((values(0).asInstanceOf[A], values(1).asInstanceOf[A]))
           case _ => None
-
-  // CPD-ON
 
 end AvroProbeLowPriority

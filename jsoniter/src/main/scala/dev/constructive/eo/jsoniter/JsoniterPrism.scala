@@ -181,7 +181,18 @@ final class JsoniterPrism[A] private[jsoniter] (
   private[jsoniter] def toTraversal[B](using JsonValueCodec[B]): JsoniterTraversal[B] =
     new JsoniterTraversal[B](steps :+ PathStep.Wildcard)
 
-object JsoniterPrism:
+object JsoniterPrism
+    extends JsoniterPathConstructors[JsoniterPrism](
+      [A] =>
+        (steps: List[PathStep], codec: JsonValueCodec[A]) =>
+          new JsoniterPrism[A](steps)(using codec),
+      (path, steps) =>
+        if steps.contains(PathStep.Wildcard) then
+          Left(
+            s"JsoniterPrism path '$path' contains '[*]' — use JsoniterTraversal for wildcard paths"
+          )
+        else Right(steps),
+    ):
 
   /** Scan the document in `bytes[from, until)` for `steps` and read the focused span with `decode`
     * (which may throw): `hit(start, end, value)` with the span's absolute positions, or `miss` when
@@ -257,48 +268,6 @@ object JsoniterPrism:
     */
   def inPlace[A](using JsonValueCodec[A]): JsoniterInPlacePrism[A] =
     fromSteps[A](Nil).inPlace
-
-  /** Build a read-write Prism over a JSON byte buffer at the given JSONPath — the ONLY string-path
-    * constructor, and it keeps the failure in the type. An unparseable path, or one carrying a
-    * `[*]` wildcard (a [[JsoniterTraversal]] shape), comes back as `Left(message)`: a path is DATA
-    * (a config value, a CLI argument, a registry lookup), so there is no throwing twin to reach
-    * for. Path syntax: `$`, dotted field names (`$.foo.bar`), array indices (`$[0]`). See
-    * [[PathParser]] for the full grammar; [[apply]] is the path-free root constructor.
-    *
-    * @example
-    *   {{{
-    * import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
-    * given codec: JsonValueCodec[Long] = JsonCodecMaker.make
-    *
-    * val idP: Either[String, JsoniterPrism[Long]] =
-    *   JsoniterPrism.fromPath[Long]("$.payload.user.id")
-    * val bytes: Array[Byte] = ...
-    * idP.map(_.foldMap(identity)(bytes))   // Either[String, Long], no AST allocation
-    *   }}}
-    *
-    * @group Constructors
-    */
-  def fromPath[A](path: String)(using
-      codec: JsonValueCodec[A]
-  ): Either[String, JsoniterPrism[A]] =
-    PathParser.parse(path) match
-      case Right(steps) =>
-        if steps.contains(PathStep.Wildcard) then
-          Left(
-            s"JsoniterPrism path '$path' contains '[*]' — use JsoniterTraversal for wildcard paths"
-          )
-        else Right(fromSteps[A](steps))
-      case Left(e) => Left(s"invalid JSONPath '$path': $e")
-
-  /** Build a Prism from an already-parsed step list — useful for reusing a parsed path across
-    * multiple optics, or when constructing programmatically.
-    *
-    * @group Optics
-    */
-  private[jsoniter] def fromSteps[A](steps: List[PathStep])(using
-      codec: JsonValueCodec[A]
-  ): JsoniterPrism[A] =
-    new JsoniterPrism[A](steps)
 
 /** A [[JsoniterPrism]] that reads its document '''in place''': the source is a [[JsonSlice]], a
   * range of a larger byte array, scanned and decoded where it lies. Made by `prism.inPlace`, or at

@@ -1,10 +1,8 @@
-package dev.constructive.eo.jsoniter
-
-import scala.language.implicitConversions
+package dev.constructive.eo
+package jsoniter
 
 import cats.Functor
-import com.github.plokhotnyuk.jsoniter_scala.core.{writeToArray, JsonValueCodec, WriterConfig}
-import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
+import com.github.plokhotnyuk.jsoniter_scala.core.WriterConfig
 import dev.constructive.eo.data.Affine
 import dev.constructive.eo.laws.discipline.{OptionalTests, TraversalTests}
 import dev.constructive.eo.laws.{OptionalLaws, TraversalLaws}
@@ -12,9 +10,9 @@ import dev.constructive.eo.optics.Optic
 import dev.constructive.eo.optics.Optic.*
 import java.nio.ByteBuffer
 import org.scalacheck.{Arbitrary, Cogen, Gen, Prop}
-import org.specs2.ScalaCheck
-import org.specs2.mutable.Specification
 import org.typelevel.discipline.specs2.mutable.Discipline
+
+import SpecCodecs.given
 
 // Fixture ADTs at top level (mirrors the eo-generics convention for macro-facing test types).
 final case class SliceInner(flag: Boolean, score: Int)
@@ -41,14 +39,11 @@ final case class SliceBasket(items: List[SliceInner])
   */
 class JsonSliceSpec extends Specification with ScalaCheck with Discipline:
 
-  given JsonValueCodec[Long] = JsonCodecMaker.make
-  given JsonValueCodec[Int] = JsonCodecMaker.make
-  given JsonValueCodec[String] = JsonCodecMaker.make
-  given JsonValueCodec[List[Long]] = JsonCodecMaker.make
-  given JsonValueCodec[SliceInner] = JsonCodecMaker.make
-  given JsonValueCodec[SliceRec] = JsonCodecMaker.make
-  given innersCodec: JsonValueCodec[List[SliceInner]] = JsonCodecMaker.make
-  given JsonValueCodec[SliceBasket] = JsonCodecMaker.make
+  given JsoniterCodec[List[Long]] = JsoniterCodec.derived
+  given JsoniterCodec[SliceInner] = JsoniterCodec.derived
+  given JsoniterCodec[SliceRec] = JsoniterCodec.derived
+  given innersCodec: JsoniterCodec[List[SliceInner]] = JsoniterCodec.derived
+  given JsoniterCodec[SliceBasket] = JsoniterCodec.derived
 
   // ----- generators -----------------------------------------------------
 
@@ -128,11 +123,11 @@ class JsonSliceSpec extends Specification with ScalaCheck with Discipline:
   private val inner = JsoniterPrism[SliceRec].field(_.inner).raw
   private val bareLong = JsoniterPrism[Long]
   private val r0 = SliceRec(0, "z", Nil, SliceInner(false, 0))
-  private val headOfList = JsoniterPathFixtures.prism[Long]("$[0]")
-  private val missing = JsoniterPathFixtures.prism[Long]("$.nope")
-  private val mistyped = JsoniterPathFixtures.prism[Long]("$.name")
+  private val headOfList = JsoniterPrism.path[Long]("$[0]")
+  private val missing = JsoniterPrism.path[Long]("$.nope")
+  private val mistyped = JsoniterPrism.path[Long]("$.name")
   private val tags: JsoniterTraversal[Long] = JsoniterPrism[SliceRec].field(_.tags).each
-  private val listItems = JsoniterPathFixtures.traversal[Long]("$[*]")
+  private val listItems = JsoniterTraversal.path[Long]("$[*]")
 
   // ----- differential: in place == copied out -----------------------------
 

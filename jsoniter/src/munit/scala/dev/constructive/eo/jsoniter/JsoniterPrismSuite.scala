@@ -2,8 +2,6 @@ package dev.constructive.eo.jsoniter
 
 import scala.language.implicitConversions
 
-import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
-import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
 import dev.constructive.eo.data.Affine
 import dev.constructive.eo.optics.Optic
 import dev.constructive.eo.optics.Optic.*
@@ -20,12 +18,11 @@ import dev.constructive.eo.optics.Optic.*
   * Phase 2 (read-write splice) is out of scope here; those tests live in a future
   * `JsoniterPrismWriteSpec` once splice mechanics are implemented.
   */
-import JsoniterPathFixtures.prism
 
 class JsoniterPrismSuite extends munit.FunSuite:
 
-  given longCodec: JsonValueCodec[Long] = JsonCodecMaker.make
-  given stringCodec: JsonValueCodec[String] = JsonCodecMaker.make
+  given longCodec: JsoniterCodec[Long] = JsoniterCodec.derived
+  given stringCodec: JsoniterCodec[String] = JsoniterCodec.derived
 
   private def bytes(s: String): Array[Byte] = s.getBytes("UTF-8")
 
@@ -82,13 +79,13 @@ class JsoniterPrismSuite extends munit.FunSuite:
 
   test("JsoniterPrism on Affine: hit decodes / miss passes through / decode-failure → Miss") {
     val idP: Optic[Array[Byte], Array[Byte], Long, Long, Affine] =
-      prism[Long]("$.payload.user.id")
+      JsoniterPrism.path[Long]("$.payload.user.id")
     idP.to(sample) match
       case h: Affine.Hit[idP.X, Long] => assertEquals(h.b, 42L)
       case _: Affine.Miss[idP.X]      => fail("expected a Hit")
 
     val absentP: Optic[Array[Byte], Array[Byte], Long, Long, Affine] =
-      prism[Long]("$.payload.user.missing")
+      JsoniterPrism.path[Long]("$.payload.user.missing")
     absentP.to(sample) match
       case m: Affine.Miss[absentP.X] =>
         assertEquals(m.fst.asInstanceOf[Array[Byte]].toSeq, sample.toSeq)
@@ -96,15 +93,15 @@ class JsoniterPrismSuite extends munit.FunSuite:
 
     // Field 'email' is a String; decoding it as Long throws → Miss.
     val mistypedP: Optic[Array[Byte], Array[Byte], Long, Long, Affine] =
-      prism[Long]("$.payload.user.email")
+      JsoniterPrism.path[Long]("$.payload.user.email")
     assert(mistypedP.to(sample).isInstanceOf[Affine.Miss[?]])
   }
 
   test("JsoniterPrism: from is identity in phase-1 (Hit and Miss both pass bytes through)") {
     val idP: Optic[Array[Byte], Array[Byte], Long, Long, Affine] =
-      prism[Long]("$.payload.user.id")
+      JsoniterPrism.path[Long]("$.payload.user.id")
     val absentP: Optic[Array[Byte], Array[Byte], Long, Long, Affine] =
-      prism[Long]("$.payload.user.missing")
+      JsoniterPrism.path[Long]("$.payload.user.missing")
     assertEquals(idP.from(idP.to(sample)).toSeq, sample.toSeq)
     assertEquals(absentP.from(absentP.to(sample)).toSeq, sample.toSeq)
   }
@@ -130,9 +127,9 @@ class JsoniterPrismSuite extends munit.FunSuite:
     import cats.instances.string.given
 
     val emailP: Optic[Array[Byte], Array[Byte], String, String, Affine] =
-      prism[String]("$.payload.user.email")
+      JsoniterPrism.path[String]("$.payload.user.email")
     val missingP: Optic[Array[Byte], Array[Byte], String, String, Affine] =
-      prism[String]("$.does.not.exist")
+      JsoniterPrism.path[String]("$.does.not.exist")
 
     assertEquals(emailP.foldMap(identity[String])(sample), "alice@example.com")
     assertEquals(missingP.foldMap(identity[String])(sample), "")

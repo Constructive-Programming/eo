@@ -1,9 +1,7 @@
 package dev.constructive.eo
 package bench
 
-import dev.constructive.eo.bench.fixture.*
-import java.util.concurrent.TimeUnit
-import org.openjdk.jmh.annotations.*
+import fixture.*
 
 /** `Optional.modify` / `Optional.replace` on a `Nested0.flag: Option[String]` focus, at varying
   * composition depth, paired against Monocle's `Optional`.
@@ -18,12 +16,6 @@ import org.openjdk.jmh.annotations.*
   * `mModify_0_empty`). The deeper benches exercise the Some branch only — the fixture's depth-3 /
   * -6 records preserve the populated leaf.
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
 class OptionalBench extends JmhDefaults:
 
   import NestedOptics.{

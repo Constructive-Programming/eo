@@ -1,15 +1,5 @@
-package dev.constructive.eo.avro
-
-import scala.language.implicitConversions
-
-import cats.data.Ior
-import java.util.ArrayList
-import org.apache.avro.Schema
-import org.apache.avro.generic.{GenericRecord, IndexedRecord}
-import org.scalacheck.Prop.forAll
-import org.scalacheck.{Arbitrary, Gen}
-import org.specs2.ScalaCheck
-import org.specs2.mutable.Specification
+package dev.constructive.eo
+package avro
 
 /** Behaviour spec for [[AvroPrism]]'s record face ([[AvroRecordPrism]], via `.record`) — the
   * cursor-backed Prism from `IndexedRecord` to a native type, with field-drilling sugar.
@@ -103,7 +93,6 @@ class AvroPrismSpec extends Specification with ScalaCheck:
       val mFn: String => String = _ + "-x"
       val expected = personRecord(p.copy(name = p.name + "-x"))
 
-      // CPD-OFF — pre-existing specs2 Ior-match checks; touched by *Unsafe removal (#101).
       val default = nameL.modify(mFn)(record)
       val correct = default match
         case Ior.Right(out) => recordsEqual(out, expected)
@@ -210,7 +199,5 @@ class AvroPrismSpec extends Specification with ScalaCheck:
   private def recordsEqual(a: IndexedRecord, b: IndexedRecord): Boolean =
     a.getSchema == b.getSchema &&
       org.apache.avro.generic.GenericData.get().compare(a, b, a.getSchema) == 0
-
-  // CPD-ON
 
 end AvroPrismSpec

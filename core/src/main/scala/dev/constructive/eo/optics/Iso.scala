@@ -58,25 +58,21 @@ final class BijectionIso[S, T, A, B](
   def to(s: S): Direct[X, A] = Direct(read(s))
   def from(d: Direct[X, B]): T = build(d.value)
 
-  // CPD-OFF — one `CanModifyFP` contract, a fused body per carrier: the signature repeats in every
-  // concrete optic that implements it.
   inline def modify(f: A => B): S => T =
     s => reverseGet(f(get(s)))
 
   /** Fused effectful modify: read, then map `reverseGet` over the effect. */
   def modifyF[G[_]](f: A => G[B])(using G: Invariant[G] & Functor[G]): S => G[T] =
     s => G.map(f(read(s)))(build)
-  // CPD-ON
 
   override inline def replace(b: B): S => T =
     val t = reverseGet(b)
     _ => t
 
-  // CPD-OFF — the fused `andThen` matrix: one overload per inner optic, each a carrier-specific
-  // kernel. Measured against the generic `AssociativeFunctor` / `Morph` route (AndThenBench, see the
-  // 2.0 CHANGELOG): never more B/op per call, and only they keep a chain in concrete classes — the
-  // generic route allocates per level (lens∘lens depth 6: 528 vs 120 B/op). The signatures and
-  // the `Optional.fused(…)` shape repeat across them by construction.
+  // The fused `andThen` matrix: one overload per inner optic, each a carrier-specific kernel.
+  // Measured against the generic `AssociativeFunctor` / `Morph` route (AndThenBench, see the 2.0
+  // CHANGELOG): never more B/op per call, and only they keep a chain in concrete classes — the
+  // generic route allocates per level (lens∘lens depth 6: 528 vs 120 B/op).
   /** Fused `Iso.andThen(Iso)` — composes `get`s and `reverseGet`s directly. `inline` so each
     * compose site splices distinct lambdas, keeping a deep `iso.andThen(iso)…` chain under C2's
     * recursive-inline cap (see [[Getter.andThen]] / [[PLens.andThen]]).
@@ -119,8 +115,6 @@ final class BijectionIso[S, T, A, B](
     Optional.fused(
       getOrModify = s => Optional.liftMiss(inner.getOrModify(get(s)))(reverseGet),
       modify = (s, f) => reverseGet(inner.modifyAt(get(s), f)),
-      to = s => Optional.liftTo(inner, get(s))(reverseGet, identity),
+      to = s => Optional.liftThrough(inner, get(s))(reverseGet),
       rebuild = (mi, d) => reverseGet(inner.rebuild(mi, d)),
     )
-
-  // CPD-ON

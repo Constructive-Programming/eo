@@ -1,10 +1,5 @@
 package dev.constructive.eo
 
-import org.scalacheck.{Gen, Prop}
-import org.specs2.ScalaCheck
-import org.specs2.mutable.Specification
-
-import optics.Traversal
 import data.PSVec
 
 /** Capacity-boundary and contract checks for the PSVec/builder machinery, driven through the public

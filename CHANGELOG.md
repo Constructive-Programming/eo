@@ -15,6 +15,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   accessor supplied per carrier, so a resolution mechanism that lands on the wrong slot fails.
   Every other family is intrinsic and passes a mis-targeted optic, which is lawful onto the slot it
   did hit.
+- **eo-jsoniter `JsoniterCodec`.** `type JsoniterCodec[A] = JsonValueCodec[A]` plus an inline
+  `JsoniterCodec.derived` (jsoniter-scala's `JsonCodecMaker.make`, default configuration): declaring
+  the codecs a `JsoniterPrism` reads through takes one import next to the prism's own, instead of
+  one from each of jsoniter-scala's `core` and `macros` packages —
+  `given JsoniterCodec[Person] = JsoniterCodec.derived`. The same type as `JsonValueCodec`, so
+  existing codecs keep working. jsoniter-scala-macros is an Optional dependency: the derivation
+  expands at the call site, which needs it anyway.
+- **eo-jsoniter `JsoniterPrism.path` / `JsoniterTraversal.path`.** A literal path checked at compile
+  time: a malformed path (or a `[*]` in a prism path) is a compile error carrying the message
+  `fromPath` would return as a `Left`, and the parsed steps are emitted as a literal, so nothing is
+  parsed or can fail at runtime. `fromPath` stays the constructor for paths known only at runtime;
+  a non-literal argument to `path` is a compile error pointing there. Replaces the
+  `fromPath(...).fold(throw ..., identity)` wrapper every literal-path caller used to write.
 - **eo-generics `plate[S]` reaches nested containers and holder records.** `Option[List[S]]`,
   `List[List[S]]`, and any composition of the supported containers now yield their `S` children,
   and a product record that is not itself an `S` is looked through: its `S` positions become
@@ -83,6 +96,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Scala stays on 3.9.0, the latest long-term-release line. Already-current pins
   (cats 2.13.0, kyo 1.0.0-RC7, iron 3.4.1, vulcan 1.14.1, avro 1.12.2, the test
   stack) are unchanged.
+
+- **build: `cpdCheck` bans `// CPD-OFF` / `// CPD-ON`.** Suppression comments were fencing
+  whole fused-overload families out of copy-paste detection. Every existing fence is removed, and
+  `cpdCheck` now fails on any marker in a Scala source. Duplication touching changed lines must
+  be extracted.
+  A duplication is not gated when one of its occurrences is at most a restated signature plus one
+  body line, or a single line of code: the language makes overrides and capability givens repeat
+  the signature they implement; nor is one made only of an overload family's skeleton
+  (signatures, constructor calls, one-line named arguments), as in the fused `andThen` matrix.
+  First extractions: the JMH annotations every bench class repeated now live on `JmhDefaults`
+  (an abstract class, since JMH reads annotations off superclasses but not interfaces) in a new
+  unpublished `benchKit` module shared by all bench modules, and the avro specs import what they
+  share through package preludes of `export`s.
 
 ### Fixed
 

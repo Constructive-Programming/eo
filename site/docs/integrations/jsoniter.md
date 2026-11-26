@@ -60,38 +60,33 @@ shape is fixed at compile time and you care about throughput.
 
 A `JsoniterPrism[A]` focuses a single value at a JSONPath inside an
 `Array[Byte]`. Construct it with the path string + a
-`JsonValueCodec[A]` in scope — and note that the constructor returns
-`Either[String, JsoniterPrism[A]]`: a path is DATA (a config value, a
-CLI argument, a registry lookup), so an unparseable one is a value you
-handle, not an exception you catch. There is deliberately no throwing
-twin.
+`JsoniterCodec[A]` in scope (jsoniter-scala's `JsonValueCodec[A]`,
+derived with `JsoniterCodec.derived`). Two constructors, by where the
+path comes from:
 
-Every path on this page is a literal, so the examples unwrap once
-(a `Left` here would be a typo in the page itself) and use the prism:
+- `JsoniterPrism.path[A]("$.a.b")` takes a **literal** path and checks
+  it at compile time: a malformed path is a compile error carrying the
+  parser's message, so nothing is parsed, or can fail, at runtime.
+- `JsoniterPrism.fromPath[A](raw)` takes a path known only at runtime
+  and returns `Either[String, JsoniterPrism[A]]`: a path is DATA (a
+  config value, a CLI argument, a registry lookup), so an unparseable
+  one is a value you handle, not an exception you catch. There is
+  deliberately no throwing twin.
+
+Every path on this page is a literal, so the examples use `path`:
 
 ```scala mdoc:silent
-import com.github.plokhotnyuk.jsoniter_scala.core.JsonValueCodec
-import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
-
-import dev.constructive.eo.jsoniter.{JsoniterPrism, JsoniterTraversal}
+import dev.constructive.eo.jsoniter.{JsoniterCodec, JsoniterPrism, JsoniterTraversal}
 import dev.constructive.eo.optics.Optic.*
 
-given JsonValueCodec[Long]   = JsonCodecMaker.make
-given JsonValueCodec[String] = JsonCodecMaker.make
-
-// Page helpers for LITERAL paths. Application code handles the Either
-// instead (e.g. `fromPath[Long](raw).fold(handle, use)`).
-def prism[A](path: String)(using JsonValueCodec[A]): JsoniterPrism[A] =
-  JsoniterPrism.fromPath[A](path).fold(msg => throw new IllegalArgumentException(msg), identity)
-
-def traversal[A](path: String)(using JsonValueCodec[A]): JsoniterTraversal[A] =
-  JsoniterTraversal.fromPath[A](path).fold(msg => throw new IllegalArgumentException(msg), identity)
+given JsoniterCodec[Long]   = JsoniterCodec.derived
+given JsoniterCodec[String] = JsoniterCodec.derived
 
 val sample: Array[Byte] =
   """{"payload":{"user":{"id":42,"email":"alice@example.com"}}}""".getBytes("UTF-8")
 
-val idP    = prism[Long]("$.payload.user.id")
-val emailP = prism[String]("$.payload.user.email")
+val idP    = JsoniterPrism.path[Long]("$.payload.user.id")
+val emailP = JsoniterPrism.path[String]("$.payload.user.email")
 ```
 
 ### Reading
@@ -107,7 +102,7 @@ idP.foldMap(identity[Long])(sample)
 emailP.foldMap(identity[String])(sample)
 
 // Miss: path doesn't resolve, returns Monoid.empty
-val absentP = prism[Long]("$.payload.user.absent")
+val absentP = JsoniterPrism.path[Long]("$.payload.user.absent")
 absentP.foldMap(identity[Long])(sample)
 ```
 
@@ -159,10 +154,10 @@ case class Zip(code: Int)
 case class Address(street: String, zip: Zip)
 case class Person(name: String, age: Int, address: Address)
 
-given JsonValueCodec[Int]     = JsonCodecMaker.make
-given JsonValueCodec[Zip]     = JsonCodecMaker.make
-given JsonValueCodec[Address] = JsonCodecMaker.make
-given JsonValueCodec[Person]  = JsonCodecMaker.make
+given JsoniterCodec[Int]     = JsoniterCodec.derived
+given JsoniterCodec[Zip]     = JsoniterCodec.derived
+given JsoniterCodec[Address] = JsoniterCodec.derived
+given JsoniterCodec[Person]  = JsoniterCodec.derived
 
 val alice       = Person("Alice", 30, Address("Main St", Zip(12345)))
 val aliceBytes  = com.github.plokhotnyuk.jsoniter_scala.core.writeToArray(alice)
@@ -193,10 +188,10 @@ past the wildcard:
 case class Item(sku: String, price: Double)
 case class Basket(items: List[Item])
 
-given JsonValueCodec[Double]     = JsonCodecMaker.make
-given JsonValueCodec[Item]       = JsonCodecMaker.make
-given JsonValueCodec[List[Item]] = JsonCodecMaker.make
-given JsonValueCodec[Basket]     = JsonCodecMaker.make
+given JsoniterCodec[Double]     = JsoniterCodec.derived
+given JsoniterCodec[Item]       = JsoniterCodec.derived
+given JsoniterCodec[List[Item]] = JsoniterCodec.derived
+given JsoniterCodec[Basket]     = JsoniterCodec.derived
 
 val basketBytes = com.github.plokhotnyuk.jsoniter_scala.core.writeToArray(
   Basket(List(Item("a", 1.5), Item("b", 2.5)))
@@ -238,12 +233,12 @@ After — byte holder + field prisms with **leaf codecs only**
 (`JsonValueCodec[User]` is never derived):
 
 ```scala mdoc:silent
-// given JsonValueCodec[String] = JsonCodecMaker.make   — leaf codec, already in scope above
+// given JsoniterCodec[String] = JsoniterCodec.derived   — leaf codec, already in scope above
 
 val userBytes: Array[Byte] =
   """{"id":7,"email":"a@x.org","plan":"free"}""".getBytes("UTF-8")
 
-val planP = prism[String]("$.plan")
+val planP = JsoniterPrism.path[String]("$.plan")
 ```
 
 ```scala mdoc
@@ -334,7 +329,7 @@ import cats.instances.int.given
 val cart: Array[Byte] =
   """{"cart":{"items":[1,2,3,4,5,6,7,8,9,10]}}""".getBytes("UTF-8")
 
-val itemsT = traversal[Long]("$.cart.items[*]")
+val itemsT = JsoniterTraversal.path[Long]("$.cart.items[*]")
 ```
 
 ```scala mdoc
@@ -593,7 +588,7 @@ per-element reassembly, no Composer hop required.
 | Decode / encode the whole document (`Prism[Array[Byte], A]`) | `JsoniterPrism[A]`                  |
 | Replace a `JsonCodecMaker` model with bytes + optics  | [migration recipe](#migrating-a-jsoncodecmaker-model-optics-as-evidence) |
 | Write one scalar back into a JSON byte buffer         | `JsoniterPrism.fromPath[A]("$.path")` → `.replace(b)(bytes)` |
-| Sum / count over an array on the wire                 | `JsoniterTraversal.fromPath[A]("$.path[*]")` → `.foldMap(...)` |
+| Sum / count over an array on the wire                 | `JsoniterTraversal.path[A]("$.path[*]")` → `.foldMap(...)` |
 | Read a document in place from a larger buffer (no copy) | `JsoniterPrism.inPlace[A]…`, `prism.inPlace`, `traversal.inPlace` over `JsonSlice(…)` |
 | Drill into dynamic shapes (no codec for surrounding)  | eo-circe `codecPrism[…]` — different module |
 | Edit deeply through `[*]` on the wire                 | Phase-3 (not yet shipped); fall through to eo-circe today |

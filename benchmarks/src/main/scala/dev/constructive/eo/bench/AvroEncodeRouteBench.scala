@@ -2,17 +2,15 @@ package dev.constructive.eo
 package bench
 
 import scala.compiletime.uninitialized
+import scala.jdk.CollectionConverters.*
 
+import hearth.kindlings.avroderivation.AvroConfig
 import java.io.ByteArrayOutputStream
-import java.util.concurrent.TimeUnit
-
-import avro.AvroCodec
-import hearth.kindlings.avroderivation.{AvroConfig, AvroDecoder, AvroEncoder, AvroSchemaFor}
 import org.apache.avro.Schema
 import org.apache.avro.generic.GenericDatumWriter
 import org.apache.avro.io.{BinaryEncoder, EncoderFactory}
-import org.openjdk.jmh.annotations.*
-import scala.jdk.CollectionConverters.*
+
+import avro.AvroCodec
 
 /** Fixtures + routes for [[AvroEncodeRouteBench]]. Kept top-level: kindlings' derivation, like
   * hearth's constructor synthesis, must not see an outer accessor.
@@ -131,12 +129,6 @@ object EncodeRouteImpls:
   *   sbt "benchmarks/Jmh/run -i 5 -wi 3 -f 3 -t 1 -prof gc .*AvroEncodeRouteBench.*"
   * }}}
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
 class AvroEncodeRouteBench extends JmhDefaults:
 
   import EncodeRouteImpls.*

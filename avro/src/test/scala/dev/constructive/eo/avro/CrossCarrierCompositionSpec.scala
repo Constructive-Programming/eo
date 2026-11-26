@@ -1,16 +1,9 @@
-package dev.constructive.eo.avro
+package dev.constructive.eo
+package avro
 
-import scala.language.implicitConversions
-
-import cats.data.Ior
-import dev.constructive.eo.data.Affine
-import dev.constructive.eo.generics.lens
-import dev.constructive.eo.optics.{AffineFold, Lens, Optic, PickFold}
-import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
-import java.util.ArrayList
-import org.apache.avro.Schema
-import org.apache.avro.generic.{GenericData, IndexedRecord}
-import org.specs2.mutable.Specification
+import data.Affine
+import generics.lens
+import optics.{AffineFold, PickFold}
 
 /** Unit 9: cross-carrier composition regression specs for the Avro carrier.
   *
@@ -30,7 +23,6 @@ class CrossCarrierCompositionSpec extends Specification:
 
   import AvroSpecFixtures.*
   import CrossCarrierCompositionSpec.*
-  import CrossCarrierCompositionSpec.given
 
   // covers: scenario (1) — plain Lens(Box) → AvroFieldsPrism → AffineFold chain returns
   //   Some(name) on an adult payload, None on a minor (AffineFold miss), None on an
@@ -167,7 +159,6 @@ class CrossCarrierCompositionSpec extends Specification:
 
   // covers: manual composition with Ior unwrap, diagnostic case: traversal.modify directly
   // observes chain failures
-  // CPD-OFF — pre-existing Envelope/Basket manual-composition scaffolding; touched by *Unsafe removal (#101).
   "(4) generics lens → AvroTraversal: manual composition (Ior unwrap + diagnostic)" >> {
     val outer = Lens[Envelope, IndexedRecord](_.payload, (e, r) => e.copy(payload = r))
     val trav = codecPrism[Basket].items.each.name.record
@@ -270,8 +261,6 @@ class CrossCarrierCompositionSpec extends Specification:
     a.getSchema == b.getSchema &&
       GenericData.get().compare(a, b, a.getSchema) == 0
 
-  // CPD-ON
-
 end CrossCarrierCompositionSpec
 
 object CrossCarrierCompositionSpec:
@@ -287,19 +276,5 @@ object CrossCarrierCompositionSpec:
     * that the cross-carrier scenarios need).
     */
   case class Envelope(tag: String, payload: IndexedRecord)
-
-  // The two NamedTuple types the `.fields(_.name, _.age)` and `.fields(_.name, _.price)` macros
-  // synthesise. Kept at the spec-object level so the spec body can ascribe values to them.
-
-  type NameAge = NamedTuple.NamedTuple[("name", "age"), (String, Int)]
-  type NamePrice = NamedTuple.NamedTuple[("name", "price"), (String, Double)]
-
-  given AvroEncoder[NameAge] = AvroEncoder.derived
-  given AvroDecoder[NameAge] = AvroDecoder.derived
-  given AvroSchemaFor[NameAge] = AvroSchemaFor.derived
-
-  given AvroEncoder[NamePrice] = AvroEncoder.derived
-  given AvroDecoder[NamePrice] = AvroDecoder.derived
-  given AvroSchemaFor[NamePrice] = AvroSchemaFor.derived
 
 end CrossCarrierCompositionSpec

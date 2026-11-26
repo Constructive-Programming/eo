@@ -16,11 +16,9 @@ import scala.compiletime.testing.typeChecks
 
 import cats.Representable
 import cats.instances.function.*
-import org.specs2.mutable.Specification
 
 import optics.*
 import data.{Direct, GlassF, ModifyF, MultiFocus}
-import compose.{AssociativeFunctor, Composer}
 
 object GrateFixtures:
   case class Box[A](a: A)

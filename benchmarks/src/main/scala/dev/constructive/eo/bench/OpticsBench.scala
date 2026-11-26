@@ -4,16 +4,10 @@ package bench
 import scala.compiletime.uninitialized
 
 import cats.instances.list.given
-import dev.constructive.eo.bench.fixture.*
-import dev.constructive.eo.optics.{
-  Iso as EoIso,
-  Lens as EoLens,
-  Prism as EoPrism,
-  Traversal as EoTraversal
-}
-import java.util.concurrent.TimeUnit
-import monocle.{Iso as MIso, Lens as MLens, Prism as MPrism, Traversal as MTraversal}
-import org.openjdk.jmh.annotations.*
+import monocle.{Iso as MIso, Prism as MPrism}
+
+import fixture.*
+import optics.{Iso as EoIso, Lens as EoLens, Prism as EoPrism, Traversal as EoTraversal}
 
 /** Lens.get / Lens.replace / Lens.modify on the canonical [[Order]], paired EO vs Monocle.
   *
@@ -24,12 +18,6 @@ import org.openjdk.jmh.annotations.*
   *   - **depth-3 path** `customer.address.street: String` — the nested-copy cost both libraries pay
   *     for a deep write (three records rebuilt, `lines` still shared).
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
 class LensBench extends JmhDefaults:
 
   val order: Order = Domain.mkOrder(8)
@@ -73,12 +61,6 @@ class LensBench extends JmhDefaults:
   * no domain fixture to share — the sum-type-over-a-domain-ADT story lives in
   * [[PowerSeriesPrismBench]] and [[GenericsBench]].
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
 class PrismBench extends JmhDefaults:
 
   val present: Option[Int] = Some(7)
@@ -128,12 +110,6 @@ class PrismBench extends JmhDefaults:
   * a primitive conversion: every call allocates a new carrier on each side and exercises the same
   * boxing behaviour a real Iso would.
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
 class IsoBench extends JmhDefaults:
 
   val address: Address = Domain.DefaultCustomer.address
@@ -168,12 +144,6 @@ class IsoBench extends JmhDefaults:
   * bumps every line's `qty` — a bare `each` over the canonical element type, so the row reads
   * apples-to-apples against the integration benches' `lines[*]` traversals.
   */
-@State(Scope.Benchmark)
-@BenchmarkMode(Array(Mode.AverageTime))
-@OutputTimeUnit(TimeUnit.NANOSECONDS)
-@Fork(3)
-@Warmup(iterations = 3, time = 1)
-@Measurement(iterations = 5, time = 1)
 class TraversalBench extends JmhDefaults:
 
   @Param(Array("8", "64", "512"))

@@ -1,0 +1,9 @@
+scripts:
+  setup: |
+    if [ -f "$ORCA_ROOT_PATH/.envrc" ]; then
+      cp "$ORCA_ROOT_PATH/.envrc" "$ORCA_WORKTREE_PATH/"
+      (cd "$ORCA_WORKTREE_PATH" && direnv allow)
+    fi
+    # sbt-git dies with NoWorkTreeException in worktrees of this repo; see CLAUDE.md.
+    echo 'ThisBuild / com.github.sbt.git.SbtGit.git.gitUncommittedChanges := false' \
+      > "$ORCA_WORKTREE_PATH/zz-local-worktree.sbt"

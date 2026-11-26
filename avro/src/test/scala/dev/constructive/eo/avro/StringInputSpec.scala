@@ -1,11 +1,5 @@
-package dev.constructive.eo.avro
-
-import scala.language.implicitConversions
-
-import cats.data.Ior
-import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
-import org.apache.avro.generic.{GenericData, GenericRecord, IndexedRecord}
-import org.specs2.mutable.Specification
+package dev.constructive.eo
+package avro
 
 /** Behaviour spec for the `IndexedRecord | Array[Byte] | String` triple-input overloads on every
   * public Avro record surface — reached via `.record` on prisms and traversals alike. The `String`
@@ -32,7 +26,6 @@ import org.specs2.mutable.Specification
 class StringInputSpec extends Specification:
 
   import AvroSpecFixtures.*
-  import StringInputSpec.given
 
   // ---- AvroPrism + AvroFieldsPrism + record-pass-through (one composite) ----------
   //
@@ -105,9 +98,6 @@ class StringInputSpec extends Specification:
       .and(recordOk === true)
   }
 
-  // CPD-OFF — pre-existing String-input specs2 Ior checks; touched by *Unsafe removal (#101).
-  // covers: AvroTraversal String-input — happy parse + per-element modify (Ior.Right),
-  //   bad-JSON surfaces Ior.Left(JsonParseFailed)
   "AvroTraversal String-input: parse+modify + Ior.Left(JsonParseFailed)" >> {
     val basket = Basket("Alice", List(Order("a", 1.0, 1), Order("b", 2.0, 2)))
     val str =
@@ -134,20 +124,8 @@ class StringInputSpec extends Specification:
   private def recordsEqual(a: IndexedRecord, b: IndexedRecord): Boolean =
     a.getSchema == b.getSchema &&
       GenericData.get().compare(a, b, a.getSchema) == 0
-  // CPD-ON
 
   // Suppress unused-import lints for GenericRecord / GenericData when assertions skip them.
   private val _ = (classOf[GenericRecord], GenericData.get())
 
 end StringInputSpec
-
-object StringInputSpec:
-
-  /** The NamedTuple type the macro synthesises for `Person.fields(_.name, _.age)`. Mirrors the
-    * companion-object pattern in [[AvroFieldsPrismSpec]] so this spec is independent.
-    */
-  type NameAge = NamedTuple.NamedTuple[("name", "age"), (String, Int)]
-
-  given AvroEncoder[NameAge] = AvroEncoder.derived
-  given AvroDecoder[NameAge] = AvroDecoder.derived
-  given AvroSchemaFor[NameAge] = AvroSchemaFor.derived

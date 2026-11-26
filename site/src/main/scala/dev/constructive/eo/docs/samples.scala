@@ -42,11 +42,6 @@ final case class Customer(name: String, age: Int)
 
 final case class NameAgePair(name: String, age: Int)
 
-enum Expr:
-  case Var(name: String)
-  case App(f: Expr, x: Expr)
-  case Lam(bind: String, body: Expr)
-
 // Mutually recursive AST (O'Connor 2011, §1 / §5.1) for Multiplate fences.
 final case class StmVar(name: String)
 

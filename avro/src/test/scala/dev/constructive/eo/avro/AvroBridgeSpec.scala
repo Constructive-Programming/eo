@@ -1,8 +1,5 @@
-package dev.constructive.eo.avro
-
-import dev.constructive.eo.optics.Optic.*
-import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
-import org.specs2.mutable.Specification
+package dev.constructive.eo
+package avro
 
 /** Two top-level model versions for the [[AvroBridge]] spec. Top-level (not nested in the spec
   * class) so kindlings' `new T(...)` derivation isn't tripped by a missing outer accessor.

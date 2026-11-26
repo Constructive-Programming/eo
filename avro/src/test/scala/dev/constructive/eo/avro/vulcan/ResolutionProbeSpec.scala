@@ -1,6 +1,5 @@
 package dev.constructive.eo.avro.vulcan
 
-// CPD-OFF — the import block of every spec in this package; a spec header is not a code repeat.
 import scala.compiletime.summonFrom
 import scala.language.implicitConversions
 
@@ -18,7 +17,6 @@ import dev.constructive.eo.avro.{
 import hearth.kindlings.avroderivation.{AvroDecoder, AvroEncoder, AvroSchemaFor}
 import org.apache.avro.Schema
 import org.specs2.mutable.Specification
-// CPD-ON
 
 // ==============================================================================================
 // The DIFFERENTIAL CODEC PROBE (issue #100), end to end and at the driver.
@@ -86,14 +84,13 @@ object RecNode:
 // ---- `.fields` over a renamed AND reordered codec -----------------------------------------------
 object RPairNt:
 
-  // CPD-OFF — the NamedTuple codec triplet is the only way to spell a `.fields` focus; the same
-  // five lines sit beside every such fixture (see `DivergentCodecs.ThreeNt`).
+  // The NamedTuple codec triplet is the only way to spell a `.fields` focus; the same five lines
+  // sit beside every such fixture (see `DivergentCodecs.ThreeNt`).
   type AB = NamedTuple.NamedTuple[("alpha", "beta"), (String, String)]
 
   given AvroEncoder[AB] = AvroEncoder.derived
   given AvroDecoder[AB] = AvroDecoder.derived
   given AvroSchemaFor[AB] = AvroSchemaFor.derived
-  // CPD-ON
 
 end RPairNt
 
@@ -209,10 +206,9 @@ class ResolutionProbeSpec extends Specification:
   "the probe reads the slot the codec writes, where neither names nor position can" >> {
     // {beta_name, alpha_name} vs {alpha, beta}: equal arity, no name hit, permuted — position would
     // aim `alpha` at `beta_name`. `ResolutionResidualSpec` pins the values read through these.
-    // CPD-OFF — `ResolutionResidualSpec` asserts the same two verdicts for `RPair`.
+    // `ResolutionResidualSpec` asserts the same two verdicts for `RPair`.
     (resolved(codecPrism[RPair].field(_.alpha)) === "alpha_name")
       .and(resolved(codecPrism[RPair].field(_.beta)) === "beta_name")
-    // CPD-ON
   }
 
   "a nested hop probes the INNER codec, not the outer one" >> {
